@@ -59,7 +59,79 @@ alter table recycling_partners enable row level security;
 alter table recycling_deliveries enable row level security;
 alter table reward_transactions enable row level security;
 
-create policy "users can read own profile" on profiles for select using (auth.uid() = id);
-create policy "users can update own profile" on profiles for update using (auth.uid() = id);
-create policy "users create pickup requests" on pickup_requests for insert with check (auth.uid() = user_id);
-create policy "users see own pickup requests" on pickup_requests for select using (auth.uid() = user_id);
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  insert into public.profiles (id, full_name, phone)
+  values (
+    new.id,
+    new.raw_user_meta_data ->> 'full_name',
+    new.raw_user_meta_data ->> 'phone'
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+after insert on auth.users
+for each row execute function public.handle_new_user();
+
+create or replace function public.current_user_role()
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select role from public.profiles where id = (select auth.uid());
+$$;
+
+revoke execute on function public.current_user_role() from public, anon;
+grant execute on function public.current_user_role() to authenticated;
+
+create policy "users can read own profile"
+on profiles for select to authenticated
+using ((select auth.uid()) = id);
+
+create policy "users can update own profile"
+on profiles for update to authenticated
+using ((select auth.uid()) = id)
+with check ((select auth.uid()) = id);
+
+create policy "users create pickup requests"
+on pickup_requests for insert to authenticated
+with check ((select auth.uid()) = user_id);
+
+create policy "users and operations can read pickup requests"
+on pickup_requests for select to authenticated
+using (
+  (select auth.uid()) = user_id
+  or (select public.current_user_role()) in ('collector', 'admin')
+);
+
+create policy "operations can update pickup requests"
+on pickup_requests for update to authenticated
+using ((select public.current_user_role()) in ('collector', 'admin'))
+with check ((select public.current_user_role()) in ('collector', 'admin'));
+
+create policy "authenticated users can read recycling partners"
+on recycling_partners for select to authenticated
+using (true);
+
+create policy "users can read own reward transactions"
+on reward_transactions for select to authenticated
+using ((select auth.uid()) = user_id or (select public.current_user_role()) = 'admin');
+
+create policy "admins can issue reward transactions"
+on reward_transactions for insert to authenticated
+with check ((select public.current_user_role()) = 'admin');
+
+create index if not exists pickup_requests_user_id_idx on pickup_requests(user_id);
+create index if not exists pickup_requests_status_idx on pickup_requests(status);
+create index if not exists reward_transactions_user_id_idx on reward_transactions(user_id);
