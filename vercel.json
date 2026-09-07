@@ -1,0 +1,5 @@
+{
+  "installCommand": "cd bottle-up-mvp && npm install",
+  "buildCommand": "cd bottle-up-mvp && npm run build",
+  "outputDirectory": "bottle-up-mvp/dist"
+}
