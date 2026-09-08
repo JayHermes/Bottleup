@@ -8,12 +8,12 @@ const styles = `
 
 document.head.appendChild(Object.assign(document.createElement('style'), { textContent: styles }))
 
-function showMessage(message, error = false) {
-  root.innerHTML = `<div class="authGate"><div class="authCard"><div class="authBrand"><div class="authLogo">♻</div><span>Bottle<span style="color:#5be394">Up</span></span></div><h1 class="authTitle">Something went wrong</h1><p class="authCopy">BottleUp could not finish loading this page.</p><div class="authMessage ${error ? 'authError' : ''}">${escapeHtml(message)}</div></div></div>`
-}
-
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]))
+}
+
+function showMessage(message) {
+  root.innerHTML = `<div class="authGate"><div class="authCard"><div class="authBrand"><div class="authLogo">♻</div><span>Bottle<span style="color:#5be394">Up</span></span></div><h1 class="authTitle">Something went wrong</h1><p class="authCopy">BottleUp could not finish loading this page.</p><div class="authMessage authError">${escapeHtml(message)}</div></div></div>`
 }
 
 function renderAuth(message = '', error = false, mode = 'signin') {
@@ -74,12 +74,12 @@ async function loadApp() {
     await import('./main.jsx')
   } catch (error) {
     console.error('BottleUp app failed to load:', error)
-    showMessage(error instanceof Error ? error.message : 'The BottleUp app failed to load.', true)
+    showMessage(error instanceof Error ? error.message : 'The BottleUp app failed to load.')
   }
 }
 
 if (!supabase) {
-  root.innerHTML = `<div class="authGate"><div class="authCard"><div class="authBrand"><div class="authLogo">♻</div><span>BottleUp</span></div><h1 class="authTitle">Supabase is not configured</h1><p class="authCopy">Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to the deployment environment.</p><div class="authMessage authConfig">${escapeHtml(supabaseConfigError || 'No valid Supabase configuration was found.')}</div></div></div>`
+  root.innerHTML = `<div class="authGate"><div class="authCard"><div class="authBrand"><div class="authLogo">♻</div><span>BottleUp</span></div><h1 class="authTitle">Supabase is not configured</h1><p class="authCopy">Add the Supabase Project URL and browser-safe publishable/anon key to the deployment environment.</p><div class="authMessage authConfig">${escapeHtml(supabaseConfigError || 'No valid Supabase configuration was found.')}</div></div></div>`
 } else {
   supabase.auth.onAuthStateChange(event => {
     if (event === 'SIGNED_OUT') window.location.reload()
