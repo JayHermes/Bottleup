@@ -1,0 +1,48 @@
+/* BottleUp visual polish — additive, no layout rewrite. */
+html{scroll-behavior:smooth}
+body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+button,a{transition:transform .18s ease,background-color .18s ease,border-color .18s ease,color .18s ease,box-shadow .18s ease,opacity .18s ease}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--green-bright);outline-offset:3px}
+.landingNav{backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);background:rgba(8,17,14,.78);border-bottom:1px solid rgba(53,200,117,.1)}
+.ghostButton:hover{background:rgba(53,200,117,.08);border-color:rgba(141,240,178,.34);transform:translateY(-1px)}
+.primary:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(37,169,95,.18)}
+.landingHero{position:relative;isolation:isolate;background:radial-gradient(circle at 72% 35%,rgba(53,200,117,.08),transparent 30%)}
+.landingCopy h1{max-width:920px}
+.landingCopy h1 em{font-style:normal;color:var(--green-bright);text-shadow:0 0 45px rgba(141,240,178,.08)}
+.bottleIllustration{position:relative;overflow:hidden;transform:rotate(-1.5deg);transition:transform .35s ease,box-shadow .35s ease}
+.bottleIllustration:before,.bottleIllustration:after{content:"";position:absolute;border-radius:50%;pointer-events:none}
+.bottleIllustration:before{width:240px;height:240px;top:-80px;right:-70px;background:radial-gradient(circle,rgba(141,240,178,.15),transparent 68%)}
+.bottleIllustration:after{width:180px;height:180px;bottom:-100px;left:-80px;background:radial-gradient(circle,rgba(230,185,87,.09),transparent 68%)}
+.bottleIllustration:hover{transform:rotate(0) translateY(-5px);box-shadow:inset 0 0 0 1px rgba(141,240,178,.18),0 42px 110px rgba(0,0,0,.34)}
+.bottleIllustration svg,.bottleIllustration span{position:relative;z-index:1}
+.floatCard{box-shadow:0 18px 45px rgba(0,0,0,.24),inset 0 0 0 1px rgba(141,240,178,.04);transition:transform .25s ease,box-shadow .25s ease}
+.floatCard:hover{transform:translateY(-3px);box-shadow:0 22px 52px rgba(0,0,0,.3),inset 0 0 0 1px rgba(141,240,178,.08)}
+.problem,.how,.landingReward{position:relative}
+.problem:before,.how:before,.landingReward:before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(90deg,transparent,rgba(53,200,117,.22),transparent)}
+.howCard{transition:background-color .2s ease,padding-top .2s ease}
+.howCard:hover{background:rgba(53,200,117,.025);padding-top:21px}
+.howCard>span{color:var(--green-bright);font-variant-numeric:tabular-nums}
+.landingReward{background:radial-gradient(circle at 78% 50%,rgba(53,200,117,.07),transparent 34%)}
+.pointPill{box-shadow:0 14px 45px rgba(0,0,0,.2),inset 0 0 0 1px rgba(141,240,178,.08);transition:transform .2s ease,box-shadow .2s ease}
+.pointPill:hover{transform:translateY(-3px);box-shadow:0 20px 55px rgba(0,0,0,.28),inset 0 0 0 1px rgba(141,240,178,.14)}
+.landingFooter{border-top:1px solid rgba(53,200,117,.1)}
+.topbar{backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 8px 30px rgba(0,0,0,.1)}
+.sidebar{border-right-color:rgba(53,200,117,.09)}
+.hero{position:relative;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.16),inset 0 1px 0 rgba(141,240,178,.07)}
+.hero:after{content:"";position:absolute;width:360px;height:360px;right:-110px;top:-160px;border-radius:50%;background:radial-gradient(circle,rgba(141,240,178,.12),transparent 68%);pointer-events:none}
+.heroOrb{box-shadow:0 0 80px rgba(53,200,117,.08),inset 0 0 35px rgba(141,240,178,.04)}
+.impactCard,.miniStat{transition:background-color .2s ease,transform .2s ease}
+.impactCard:hover,.miniStat:hover{background:rgba(53,200,117,.025);transform:translateY(-2px)}
+.requestCard{transition:background-color .2s ease,transform .2s ease,border-color .2s ease}
+.requestCard:hover{transform:translateX(2px);background:rgba(53,200,117,.035)}
+.status{box-shadow:inset 0 0 0 1px rgba(141,240,178,.05)}
+.tierCard{transition:background-color .2s ease,padding-left .2s ease,padding-right .2s ease}
+.tierCard:hover{background:rgba(53,200,117,.025);padding-left:8px;padding-right:8px}
+.economicsStrip{background:linear-gradient(180deg,rgba(53,200,117,.018),transparent)}
+.economicsStrip>div{transition:background-color .2s ease}
+.economicsStrip>div:hover{background:rgba(53,200,117,.025)}
+.emptyState{border-color:rgba(53,200,117,.14);background:linear-gradient(145deg,rgba(53,200,117,.035),rgba(15,30,24,.12));box-shadow:inset 0 1px 0 rgba(141,240,178,.035)}
+.modal,.dialog{box-shadow:0 30px 90px rgba(0,0,0,.42);border-color:rgba(141,240,178,.14)}
+@media(max-width:800px){.landingHero{background:radial-gradient(circle at 50% 40%,rgba(53,200,117,.07),transparent 38%)}.howCard:hover{padding-top:21px}.requestCard:hover{transform:none}.impactCard:hover,.miniStat:hover{transform:none}}
+@media(max-width:560px){.landingCopy h1{line-height:.88}.landingHero{padding-bottom:70px}.landingVisual{min-height:340px}.bottleIllustration:hover{transform:rotate(-1.5deg)}.pointPill{margin-top:8px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}}
