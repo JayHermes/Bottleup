@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import {
   ArrowRight, Bell, Camera, Check, ChevronRight, Coins, Gift, Home, Leaf,
   MapPin, Package, Recycle, ShieldCheck, Truck, UserRound, Users,
-  WalletCards, Weight, X, Zap
+  WalletCards, Weight, X
 } from 'lucide-react'
 import './styles.css'
 
@@ -29,6 +29,24 @@ const initialRequests = [
   { id: 'BU-002', user: 'Musa', type: 'Plastic Containers', estimate: 7, actual: 6.5, location: 'Uyo', status: 'COLLECTED', collector: 'Ekemini', points: 0, date: 'Sep 3' },
 ]
 
+function BottleGauge({ progress = 0 }) {
+  const fillPct = Math.round(progress * 100)
+  return (
+    <svg width={64} height={92} viewBox="0 0 64 92" xmlns="http://www.w3.org/2000/svg" role="img" aria-label={`${fillPct}% to next tier`}>
+      <defs>
+        <clipPath id="jarClip"><path d="M22 6h20v8c5 2 8 6.6 8 12v50c0 4.4-3.6 8-8 8H22c-4.4 0-8-3.6-8-8V26c0-5.4 3-10 8-12V6Z" /></clipPath>
+        <linearGradient id="jarFill" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stopColor="var(--gold)" />
+          <stop offset="100%" stopColor="var(--green-bright)" />
+        </linearGradient>
+      </defs>
+      <path d="M22 6h20v8c5 2 8 6.6 8 12v50c0 4.4-3.6 8-8 8H22c-4.4 0-8-3.6-8-8V26c0-5.4 3-10 8-12V6Z" fill="var(--surface-3)" stroke="var(--line)" />
+      <g clipPath="url(#jarClip)"><rect x="8" y={92 - fillPct * 0.76} width="48" height="92" fill="url(#jarFill)" /></g>
+      <rect x="26" y="1" width="12" height="6" rx="2" fill="var(--surface-3)" stroke="var(--line)" />
+    </svg>
+  )
+}
+
 function Logo({ size = 34 }) {
   return <div className="logoMark" style={{ width: size, height: size }} aria-hidden="true"><Recycle size={size * .62} strokeWidth={2.7} /></div>
 }
@@ -49,12 +67,15 @@ function Landing({ enter }) {
 
       <section className="problem" id="why"><div><span className="eyebrow">WHY BOTTLEUP</span><h2>Recycling shouldn't feel like a dead end.</h2></div><p>There is recyclable material everywhere, but collection is often scattered. People hand materials over without knowing where they went, how much was actually recovered or whether they received fair value. BottleUp brings the journey into one place.</p></section>
 
-      <section className="how" id="how"><div className="sectionIntro"><span className="eyebrow">HOW IT WORKS</span><h2>One simple loop.</h2><p>From the bag in your home to a verified collection.</p></div><div className="howGrid">{[
-        ['01','Recycle','Set aside your plastic instead of throwing it away.'],
-        ['02','Schedule','Tell us what you have, how much and where to collect it.'],
-        ['03','Get collected','A collector accepts the request and handles the pickup.'],
-        ['04','Get verified','Weight is confirmed and your points are issued.'],
-      ].map(([n,t,b]) => <div className="howCard" key={n}><span>{n}</span><div><strong>{t}</strong><p>{b}</p></div></div>)}</div></section>
+      <section className="how" id="how"><div className="sectionIntro"><span className="eyebrow">HOW IT WORKS</span><h2>One simple loop.</h2><p>From the bag in your home to a verified collection — and back again.</p></div>
+        <div className="loopFlow">{[
+          [Leaf,'Recycle','Set aside your plastic instead of throwing it away.'],
+          [Package,'Schedule','Tell us what you have, how much and where to collect it.'],
+          [Truck,'Get collected','A collector accepts the request and handles the pickup.'],
+          [ShieldCheck,'Get verified','Weight is confirmed and your points are issued.'],
+        ].map(([Icon,t,b], i, arr) => <React.Fragment key={t}><div className="loopStep"><span className="loopBadge"><Icon size={18} /></span><strong>{t}</strong><p>{b}</p></div>{i < arr.length - 1 && <span className="loopArrow"><ChevronRight size={16} /></span>}</React.Fragment>)}</div>
+        <div className="loopReturn"><span className="loopSpin"><Recycle size={15} /></span>Then it repeats — every verified kg starts the loop again.</div>
+      </section>
 
       <section className="landingReward"><div><span className="eyebrow">EARN AS YOU RECYCLE</span><h2>1 kg of verified plastic = <strong>100 points.</strong></h2><p>Your points build with every verified collection. Rewards shown in the pilot can be redeemed once the corresponding reward partner is active.</p></div><div className="pointPill"><Coins size={19} /><strong>100</strong><span>points / kg</span></div></section>
     </main>
@@ -79,7 +100,33 @@ function PageTitle({ eyebrow, title, body }) { return <div className="pageTitle"
 
 function PickupModal({ form, setForm, submit, close }) {
   const [photo, setPhoto] = useState(null)
-  return <div className="modalBackdrop" onMouseDown={e => e.target === e.currentTarget && close()}><div className="modal"><div className="modalHead"><div><span className="eyebrow">NEW COLLECTION</span><h2>Schedule a pickup</h2></div><button className="iconButton" onClick={close}><X size={18} /></button></div><form onSubmit={submit}><label>What are you recycling?<select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>{PLASTIC_TYPES.map(t => <option key={t}>{t}</option>)}</select></label><label>Estimated weight<input required type="number" min="0.1" step="0.1" value={form.estimate} onChange={e => setForm({ ...form, estimate: e.target.value })} placeholder="e.g. 5 kg" /></label><label>Pickup location<div className="inputWithIcon"><MapPin size={16} /><input required value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} placeholder="Area or landmark" /></div></label><div className="fieldLabel">Photo <span className="optional">optional</span><label className="photoDrop"><Camera size={20} /><span>{photo ? photo.name : 'Add a photo of your plastic'}</span><input type="file" accept="image/*" onChange={e => setPhoto(e.target.files?.[0] || null)} /></label></div><div className="formNote"><ShieldCheck size={15} /> Final points are based on verified weight after collection.</div><button className="primary large" type="submit">Submit collection request <ArrowRight size={17} /></button></form></div></div>
+  const [preview, setPreview] = useState(null)
+
+  const onPhoto = e => {
+    const file = e.target.files?.[0] || null
+    setPhoto(file)
+    setPreview(prev => { if (prev) URL.revokeObjectURL(prev); return file ? URL.createObjectURL(file) : null })
+  }
+
+  return <div className="pickupFlow">
+    <div className="pickupHead"><button className="iconButton" onClick={close}><X size={18} /></button><span className="eyebrow">NEW COLLECTION</span><span style={{ width: 34 }} /></div>
+
+    <label className="photoHero">
+      {preview
+        ? <img src={preview} alt="Your plastic" />
+        : <div className="photoPlaceholder"><Camera size={26} /><strong>Add a photo</strong><span>Helps verify weight faster · optional</span></div>}
+      <input type="file" accept="image/*" onChange={onPhoto} />
+    </label>
+
+    <form id="pickupForm" className="pickupForm" onSubmit={submit}>
+      <label>What are you recycling?<select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>{PLASTIC_TYPES.map(t => <option key={t}>{t}</option>)}</select></label>
+      <label>Estimated weight<input required type="number" min="0.1" step="0.1" value={form.estimate} onChange={e => setForm({ ...form, estimate: e.target.value })} placeholder="e.g. 5 kg" /></label>
+      <label>Pickup location<div className="inputWithIcon"><MapPin size={16} /><input required value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} placeholder="Area or landmark" /></div></label>
+      <div className="formNote"><ShieldCheck size={15} /> Final points are based on verified weight after collection.</div>
+    </form>
+
+    <div className="pickupSticky"><button className="primary large" form="pickupForm" type="submit">Submit collection request <ArrowRight size={17} /></button></div>
+  </div>
 }
 
 function UserHome({ requests, setScreen, form, setForm, submit }) {
@@ -91,9 +138,17 @@ function UserHome({ requests, setScreen, form, setForm, submit }) {
   const active = myRequests.find(r => r.status !== 'VERIFIED')
   return <>
     <section className="hero"><div className="heroCopy"><span className="eyebrow"><Leaf size={13} />YOUR IMPACT</span><h1>Keep plastic moving.</h1><p>Recycle your plastic, get it collected, and earn BottleUp Points.</p><button className="primary large" onClick={() => setShowForm(true)}>Schedule a pickup <ArrowRight size={17} /></button></div><div className="heroOrb"><Recycle size={54} strokeWidth={1.5} /><span>Small action.<br />Real impact.</span></div></section>
-    <section className="impactGrid"><div className="impactCard featured"><div className="impactLabel"><Recycle size={16} /> Plastic recycled</div><strong>{myKg.toFixed(1)}<small>kg</small></strong><span>verified through BottleUp</span></div><div className="impactCard"><div className="impactLabel"><Coins size={16} /> BottleUp Points</div><strong>{points.toLocaleString()}</strong><span>1 kg verified = 100 points</span></div><div className="impactCard"><div className="impactLabel"><Zap size={16} /> Tier</div><strong>{tierInfo.current.name}</strong><span>{tierInfo.next ? `${Math.max(0, tierInfo.next.from - myKg).toFixed(1)} kg to ${tierInfo.next.name}` : 'Top tier reached'}</span></div></section>
+    <section className="jarHero">
+      <BottleGauge progress={tierInfo.progress} />
+      <div className="jarCopy">
+        <span className="eyebrow"><Recycle size={13} />YOUR IMPACT</span>
+        <div className="jarKg">{myKg.toFixed(1)}<small>kg recycled</small></div>
+        <div className="jarMeta"><span className="tierChip">{tierInfo.current.name} tier</span><span>{tierInfo.next ? `${Math.max(0, tierInfo.next.from - myKg).toFixed(1)} kg to ${tierInfo.next.name}` : 'Top tier reached'}</span></div>
+        <div className="progress"><span style={{ width: `${Math.max(4, tierInfo.progress * 100)}%` }} /></div>
+      </div>
+      <div className="jarPoints"><Coins size={18} /><strong>{points.toLocaleString()}</strong><span>points</span></div>
+    </section>
     {active && <section className="activePickup"><div><span className="eyebrow">ACTIVE PICKUP</span><h2>{active.type}</h2><p>{active.location} · {active.estimate} kg estimated</p></div><div className="activeRight"><span className="status available">{STATUS_LABEL[active.status]}</span><button className="textButton" onClick={() => setScreen('pickups')}>Track <ChevronRight size={15} /></button></div><StageTracker status={active.status} /></section>}
-    <section className="tierCard"><div className="tierTop"><div><span className="eyebrow">YOUR JOURNEY</span><h2>{tierInfo.current.name} → {tierInfo.next?.name || 'Platinum'}</h2></div><div className="tierNumber">{Math.round(tierInfo.progress * 100)}%</div></div><div className="progress"><span style={{ width: `${Math.max(4, tierInfo.progress * 100)}%` }} /></div><div className="tierFoot"><span>{myKg.toFixed(1)} kg</span><span>{tierInfo.next ? `${tierInfo.next.from} kg` : '50+ kg'}</span></div></section>
     <section className="sectionHead"><div><span className="eyebrow">ACTIVITY</span><h2>Recent pickups</h2></div><button className="textButton" onClick={() => setScreen('pickups')}>View all <ChevronRight size={15} /></button></section>
     {myRequests.length ? <div className="requestList">{myRequests.slice(0, 3).map(r => <RequestCard key={r.id} request={r} />)}</div> : <EmptyState title="No pickups yet" body="Schedule your first collection and your history will appear here." />}
     {showForm && <PickupModal form={form} setForm={setForm} submit={e => { submit(e); setShowForm(false) }} close={() => setShowForm(false)} />}
