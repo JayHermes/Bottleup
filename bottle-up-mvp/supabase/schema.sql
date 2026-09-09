@@ -26,6 +26,8 @@ create table pickup_requests (
   material_type text not null,
   estimated_weight_kg numeric(10,2) not null,
   actual_weight_kg numeric(10,2),
+  estimated_bottles integer,
+  actual_bottles integer,
   pickup_location text not null,
   photo_url text,
   status text not null default 'AVAILABLE' check (status in ('AVAILABLE','ACCEPTED','COLLECTED','DELIVERED','VERIFIED','CANCELLED')),
@@ -53,84 +55,58 @@ create table reward_transactions (
   created_at timestamptz default now()
 );
 
+create table if not exists bottleup_economics (
+  id integer primary key default 1 check (id = 1),
+  average_bottle_weight_kg numeric(8,4) not null default 0.025,
+  platform_value_min_ngn numeric(10,2) not null default 150,
+  platform_value_max_ngn numeric(10,2) not null default 200,
+  platform_value_mid_ngn numeric(10,2) not null default 175,
+  points_per_bottle integer not null default 10,
+  points_per_kg integer not null default 400,
+  reward_naira_per_point numeric(10,4) not null default 0.1,
+  updated_at timestamptz default now()
+);
+
+insert into bottleup_economics (id, average_bottle_weight_kg, platform_value_min_ngn, platform_value_max_ngn, platform_value_mid_ngn, points_per_bottle, points_per_kg, reward_naira_per_point)
+values (1, 0.025, 150, 200, 175, 10, 400, 0.1)
+on conflict (id) do update set average_bottle_weight_kg = excluded.average_bottle_weight_kg, platform_value_min_ngn = excluded.platform_value_min_ngn, platform_value_max_ngn = excluded.platform_value_max_ngn, platform_value_mid_ngn = excluded.platform_value_mid_ngn, points_per_bottle = excluded.points_per_bottle, points_per_kg = excluded.points_per_kg, reward_naira_per_point = excluded.reward_naira_per_point, updated_at = now();
+
 alter table profiles enable row level security;
 alter table pickup_requests enable row level security;
 alter table recycling_partners enable row level security;
 alter table recycling_deliveries enable row level security;
 alter table reward_transactions enable row level security;
+alter table bottleup_economics enable row level security;
 
 create or replace function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer
-set search_path = ''
-as $$
+returns trigger language plpgsql security definer set search_path = '' as $$
 begin
   insert into public.profiles (id, full_name, phone)
-  values (
-    new.id,
-    new.raw_user_meta_data ->> 'full_name',
-    new.raw_user_meta_data ->> 'phone'
-  )
+  values (new.id, new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'phone')
   on conflict (id) do nothing;
   return new;
 end;
 $$;
 
 drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-after insert on auth.users
-for each row execute function public.handle_new_user();
+create trigger on_auth_user_created after insert on auth.users for each row execute function public.handle_new_user();
 
 create or replace function public.current_user_role()
-returns text
-language sql
-stable
-security definer
-set search_path = ''
-as $$
+returns text language sql stable security definer set search_path = '' as $$
   select role from public.profiles where id = (select auth.uid());
 $$;
-
 revoke execute on function public.current_user_role() from public, anon;
 grant execute on function public.current_user_role() to authenticated;
 
-create policy "users can read own profile"
-on profiles for select to authenticated
-using ((select auth.uid()) = id);
-
-create policy "users can update own profile"
-on profiles for update to authenticated
-using ((select auth.uid()) = id)
-with check ((select auth.uid()) = id);
-
-create policy "users create pickup requests"
-on pickup_requests for insert to authenticated
-with check ((select auth.uid()) = user_id);
-
-create policy "users and operations can read pickup requests"
-on pickup_requests for select to authenticated
-using (
-  (select auth.uid()) = user_id
-  or (select public.current_user_role()) in ('collector', 'admin')
-);
-
-create policy "operations can update pickup requests"
-on pickup_requests for update to authenticated
-using ((select public.current_user_role()) in ('collector', 'admin'))
-with check ((select public.current_user_role()) in ('collector', 'admin'));
-
-create policy "authenticated users can read recycling partners"
-on recycling_partners for select to authenticated
-using (true);
-
-create policy "users can read own reward transactions"
-on reward_transactions for select to authenticated
-using ((select auth.uid()) = user_id or (select public.current_user_role()) = 'admin');
-
-create policy "admins can issue reward transactions"
-on reward_transactions for insert to authenticated
-with check ((select public.current_user_role()) = 'admin');
+create policy "users can read own profile" on profiles for select to authenticated using ((select auth.uid()) = id);
+create policy "users can update own profile" on profiles for update to authenticated using ((select auth.uid()) = id) with check ((select auth.uid()) = id);
+create policy "users create pickup requests" on pickup_requests for insert to authenticated with check ((select auth.uid()) = user_id);
+create policy "users and operations can read pickup requests" on pickup_requests for select to authenticated using ((select auth.uid()) = user_id or (select public.current_user_role()) in ('collector', 'admin'));
+create policy "operations can update pickup requests" on pickup_requests for update to authenticated using ((select public.current_user_role()) in ('collector', 'admin')) with check ((select public.current_user_role()) in ('collector', 'admin'));
+create policy "authenticated users can read recycling partners" on recycling_partners for select to authenticated using (true);
+create policy "users can read own reward transactions" on reward_transactions for select to authenticated using ((select auth.uid()) = user_id or (select public.current_user_role()) = 'admin');
+create policy "admins can issue reward transactions" on reward_transactions for insert to authenticated with check ((select public.current_user_role()) = 'admin');
+create policy "authenticated users can read BottleUp economics" on bottleup_economics for select to authenticated using (true);
 
 create index if not exists pickup_requests_user_id_idx on pickup_requests(user_id);
 create index if not exists pickup_requests_status_idx on pickup_requests(status);
