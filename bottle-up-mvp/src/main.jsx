@@ -11,11 +11,15 @@ import { supabase, supabaseConfigError } from './lib/supabase.js'
 function useAuth() {
   const [session, setSession] = useState(undefined) // undefined = still checking, null = signed out
   const [profile, setProfile] = useState(null)
+  const [recovering, setRecovering] = useState(false)
 
   useEffect(() => {
     if (!supabase) { setSession(null); return }
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null))
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => setSession(newSession ?? null))
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (event === 'PASSWORD_RECOVERY') setRecovering(true)
+      setSession(newSession ?? null)
+    })
     return () => sub.subscription.unsubscribe()
   }, [])
 
@@ -42,7 +46,7 @@ function useAuth() {
       .then(({ data, error }) => setProfile(error ? null : data))
   }
 
-  return { session, profile, refreshProfile, loading: session === undefined }
+  return { session, profile, refreshProfile, loading: session === undefined, recovering, clearRecovering: () => setRecovering(false) }
 }
 
 function usePickupRequests(userId) {
@@ -126,7 +130,7 @@ function Avatar({ name, email, size = 'md' }) {
   return <span className={`avatar avatar-${size} ${avatarTone(name, email)}`}>{initials(name, email)}</span>
 }
 
-function Landing({ onAuth }) {
+function Landing({ onAuth, onLegal }) {
   return <div className="landing">
     <header className="landingNav"><div className="brand"><Logo /><span>Bottle<span>Up</span></span></div><button className="ghostButton" onClick={() => onAuth('signin')}>Sign in <ArrowRight size={15} /></button></header>
     <main>
@@ -154,8 +158,71 @@ function Landing({ onAuth }) {
 
       <section className="landingReward"><div><span className="eyebrow">EARN AS YOU RECYCLE</span><h2>1 kg of verified plastic = <strong>100 points.</strong></h2><p>Your points build with every verified collection. Rewards shown in the pilot can be redeemed once the corresponding reward partner is active.</p></div><div className="pointPill"><Coins size={19} /><strong>100</strong><span>points / kg</span></div></section>
     </main>
-    <footer className="landingFooter"><div className="brand"><Logo size={28} /><span>Bottle<span>Up</span></span></div><span>Recycle better. Track it. Get rewarded.</span></footer>
+    <footer className="landingFooter"><div className="brand"><Logo size={28} /><span>Bottle<span>Up</span></span></div><span>Recycle better. Track it. Get rewarded.</span><div className="legalLinks"><button onClick={() => onLegal('privacy')}>Privacy</button><button onClick={() => onLegal('terms')}>Terms</button></div></footer>
   </div>
+}
+
+function ResetPasswordScreen({ onDone }) {
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const submit = async e => {
+    e.preventDefault()
+    if (password !== confirm) { setMessage('Passwords do not match.'); setError(true); return }
+    setBusy(true)
+    setMessage('')
+    setError(false)
+    const { error } = await supabase.auth.updateUser({ password })
+    setBusy(false)
+    if (error) { setMessage(error.message); setError(true); return }
+    setMessage('Password updated. Taking you in…')
+    setTimeout(onDone, 1200)
+  }
+
+  return <div className="authGate">
+    <div className="authCard">
+      <div className="authBrand"><Logo /><span>Bottle<span>Up</span></span></div>
+      <h1 className="authTitle">Set a new password</h1>
+      <p className="authCopy">You're verified via the reset link — choose a new password for your account.</p>
+      <form className="authForm" onSubmit={submit}>
+        <label className="authLabel">New password<input className="authInput" type="password" required minLength={6} value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters" /></label>
+        <label className="authLabel">Confirm password<input className="authInput" type="password" required minLength={6} value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Type it again" /></label>
+        <button className="authButton" disabled={busy} type="submit">{busy ? 'Saving…' : 'Update password'}</button>
+        {message && <div className={`authMessage ${error ? 'authError' : ''}`}>{message}</div>}
+      </form>
+    </div>
+  </div>
+}
+
+function LegalScreen({ page, onBack }) {
+  const privacy = <>
+    <h2>What we collect</h2>
+    <p>To run BottleUp we collect your name, phone number, and email address when you sign up; the material type, estimated and verified weight, and location text (plus GPS coordinates only if you choose to add them) for each pickup you request; photos you optionally attach to a pickup; and your points balance and reward redemption history.</p>
+    <h2>Why we collect it</h2>
+    <p>This information is used to operate the pickup-and-verification loop itself — matching your request to a collector, letting an admin verify the collected weight, and crediting the correct points to your account. We don't sell your data, and we don't use it for advertising.</p>
+    <h2>Who can see it</h2>
+    <p>Collectors can see the pickups they've accepted. Admins can see pickups and applications needed to run verification and collector approval. Your authentication and data storage are handled by Supabase, our infrastructure provider.</p>
+    <h2>Your choices</h2>
+    <p>Adding a photo and precise GPS location are both optional. You can edit your name from your Profile at any time, and you can request account deletion by contacting us.</p>
+    <h2>A note on where we are</h2>
+    <p>BottleUp is an early-stage pilot. This policy describes what we actually do today, in plain language, rather than a full legal document — if you have concerns about how your data is handled, please reach out directly.</p>
+  </>
+  const terms = <>
+    <h2>Using BottleUp</h2>
+    <p>You must provide accurate information when requesting a pickup, including a realistic estimated weight — final points are always based on the weight verified after collection, not your estimate.</p>
+    <h2>Collectors</h2>
+    <p>Becoming a collector requires applying through signup and being approved by BottleUp. Approval isn't automatic, and BottleUp may decline or revoke collector status at its discretion.</p>
+    <h2>Points and rewards</h2>
+    <p>Points are earned at a fixed rate (1 kg of verified plastic = 100 points) and have no cash value. Rewards shown in the app may be limited by partner availability and are not guaranteed to be redeemable at all times. BottleUp Wallet is a reward balance, not a cash account — there is no cash withdrawal.</p>
+    <h2>Conduct</h2>
+    <p>Don't misrepresent the material or weight of a pickup, and don't attempt to circumvent the verification process. Accounts found doing so may be suspended.</p>
+    <h2>Changes</h2>
+    <p>Because BottleUp is actively being built, these terms may change as features are added. We'll aim to keep this page current with what the product actually does.</p>
+  </>
+  return <div className="authGate"><div className="authCard legalCard"><button className="iconButton authBack" onClick={onBack}><X size={18} /></button><div className="authBrand"><Logo /><span>Bottle<span>Up</span></span></div><h1 className="authTitle">{page === 'privacy' ? 'Privacy Policy' : 'Terms of Use'}</h1><div className="legalBody">{page === 'privacy' ? privacy : terms}</div></div></div>
 }
 
 function ConfigScreen() {
@@ -163,7 +230,7 @@ function ConfigScreen() {
 }
 
 function AuthPanel({ mode: initialMode, onBack }) {
-  const [mode, setMode] = useState(initialMode)
+  const [mode, setMode] = useState(initialMode) // 'signin' | 'signup' | 'forgot'
   const [fields, setFields] = useState({ fullName: '', phone: '', email: '', password: '', wantsCollector: false })
   const [message, setMessage] = useState('')
   const [error, setError] = useState(false)
@@ -177,6 +244,13 @@ function AuthPanel({ mode: initialMode, onBack }) {
     setMessage('')
     setError(false)
     try {
+      if (mode === 'forgot') {
+        const { error } = await supabase.auth.resetPasswordForEmail(fields.email, { redirectTo: window.location.origin })
+        if (error) { setMessage(error.message); setError(true) }
+        else { setMessage('If an account exists for that email, a reset link is on its way.'); setError(false) }
+        return
+      }
+
       const result = mode === 'signup'
         ? await supabase.auth.signUp({ email: fields.email, password: fields.password, options: { data: { full_name: fields.fullName, phone: fields.phone, wants_collector: fields.wantsCollector } } })
         : await supabase.auth.signInWithPassword({ email: fields.email, password: fields.password })
@@ -205,19 +279,21 @@ function AuthPanel({ mode: initialMode, onBack }) {
     <div className="authCard">
       <button className="iconButton authBack" onClick={onBack}><X size={18} /></button>
       <div className="authBrand"><Logo /><span>Bottle<span>Up</span></span></div>
-      <h1 className="authTitle">Recycle. Reward. Repeat.</h1>
-      <p className="authCopy">Create your BottleUp account or sign in to schedule pickups and keep your recycling activity attached to your account.</p>
-      <div className="authTabs">
+      <h1 className="authTitle">{mode === 'forgot' ? 'Reset your password' : 'Recycle. Reward. Repeat.'}</h1>
+      <p className="authCopy">{mode === 'forgot' ? "Enter the email on your account and we'll send a link to set a new password." : 'Create your BottleUp account or sign in to schedule pickups and keep your recycling activity attached to your account.'}</p>
+      {mode !== 'forgot' && <div className="authTabs">
         <button className={`authTab ${mode === 'signin' ? 'active' : ''}`} type="button" onClick={() => { setMode('signin'); setMessage('') }}>Sign in</button>
         <button className={`authTab ${mode === 'signup' ? 'active' : ''}`} type="button" onClick={() => { setMode('signup'); setMessage('') }}>Create account</button>
-      </div>
+      </div>}
       <form className="authForm" onSubmit={submit}>
         {mode === 'signup' && <label className="authLabel">Full name<input className="authInput" required value={fields.fullName} onChange={e => set('fullName', e.target.value)} placeholder="Your name" /></label>}
         {mode === 'signup' && <label className="authLabel">Phone<input className="authInput" value={fields.phone} onChange={e => set('phone', e.target.value)} placeholder="080..." /></label>}
         {mode === 'signup' && <label className="authCheck"><input type="checkbox" checked={fields.wantsCollector} onChange={e => set('wantsCollector', e.target.checked)} /><span>I'd like to apply to become a collector <em>(reviewed by BottleUp before it takes effect)</em></span></label>}
         <label className="authLabel">Email<input className="authInput" type="email" required value={fields.email} onChange={e => set('email', e.target.value)} placeholder="you@example.com" /></label>
-        <label className="authLabel">Password<input className="authInput" type="password" required minLength={6} value={fields.password} onChange={e => set('password', e.target.value)} placeholder="At least 6 characters" /></label>
-        <button className="authButton" disabled={busy} type="submit">{busy ? (mode === 'signup' ? 'Creating account…' : 'Signing in…') : mode === 'signup' ? 'Create account' : 'Sign in'}</button>
+        {mode !== 'forgot' && <label className="authLabel">Password<input className="authInput" type="password" required minLength={6} value={fields.password} onChange={e => set('password', e.target.value)} placeholder="At least 6 characters" /></label>}
+        {mode === 'signin' && <button type="button" className="authForgot" onClick={() => { setMode('forgot'); setMessage('') }}>Forgot password?</button>}
+        <button className="authButton" disabled={busy} type="submit">{busy ? 'Please wait…' : mode === 'forgot' ? 'Send reset link' : mode === 'signup' ? 'Create account' : 'Sign in'}</button>
+        {mode === 'forgot' && <button type="button" className="authForgot" onClick={() => { setMode('signin'); setMessage('') }}>Back to sign in</button>}
         {message && <div className={`authMessage ${error ? 'authError' : ''}`}>{message}</div>}
       </form>
       <div className="authNote">Your account is secured by Supabase Auth. Your pickup data is tied to your authenticated user.</div>
@@ -246,6 +322,9 @@ function PickupModal({ onSubmit, close }) {
   const [type, setType] = useState(PLASTIC_TYPES[0])
   const [estimate, setEstimate] = useState('')
   const [location, setLocation] = useState('')
+  const [coords, setCoords] = useState(null) // { lat, lng } once captured
+  const [locating, setLocating] = useState(false)
+  const [locateError, setLocateError] = useState('')
   const [photo, setPhoto] = useState(null)
   const [preview, setPreview] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -257,12 +336,23 @@ function PickupModal({ onSubmit, close }) {
     setPreview(prev => { if (prev) URL.revokeObjectURL(prev); return file ? URL.createObjectURL(file) : null })
   }
 
+  const useMyLocation = () => {
+    if (!navigator.geolocation) { setLocateError('Location is not available on this device.'); return }
+    setLocating(true)
+    setLocateError('')
+    navigator.geolocation.getCurrentPosition(
+      pos => { setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLocating(false) },
+      () => { setLocateError("Couldn't get your location — you can still type it below."); setLocating(false) },
+      { timeout: 10000 }
+    )
+  }
+
   const submit = async e => {
     e.preventDefault()
     if (!estimate || !location) return
     setBusy(true)
     setError('')
-    const err = await onSubmit({ type, estimate, location, photo })
+    const err = await onSubmit({ type, estimate, location, photo, coords })
     setBusy(false)
     if (err) setError(err.message || 'Could not submit this request. Please try again.')
     else close()
@@ -282,6 +372,10 @@ function PickupModal({ onSubmit, close }) {
       <label>What are you recycling?<select value={type} onChange={e => setType(e.target.value)}>{PLASTIC_TYPES.map(t => <option key={t}>{t}</option>)}</select></label>
       <label>Estimated weight<input required type="number" min="0.1" step="0.1" value={estimate} onChange={e => setEstimate(e.target.value)} placeholder="e.g. 5 kg" /></label>
       <label>Pickup location<div className="inputWithIcon"><MapPin size={16} /><input required value={location} onChange={e => setLocation(e.target.value)} placeholder="Area or landmark" /></div></label>
+      <button type="button" className="locateButton" onClick={useMyLocation} disabled={locating}>
+        {coords ? <><Check size={14} />Precise location captured</> : locating ? 'Getting your location…' : <><MapPin size={14} />Add my precise location <span>(optional, helps collectors find you)</span></>}
+      </button>
+      {locateError && <div className="authMessage authError">{locateError}</div>}
       <div className="formNote"><ShieldCheck size={15} /> Final points are based on verified weight after collection.</div>
       {error && <div className="authMessage authError">{error}</div>}
     </form>
@@ -404,6 +498,12 @@ function AdminScreen({ requests, verify }) {
 
   const [applications, setApplications] = useState(null) // null = loading
   const [appError, setAppError] = useState('')
+  const [userCount, setUserCount] = useState(null)
+
+  useEffect(() => {
+    if (!supabase) return
+    supabase.from('profiles').select('id', { count: 'exact', head: true }).then(({ count }) => setUserCount(count))
+  }, [])
 
   const loadApplications = () => {
     if (!supabase) return
@@ -425,7 +525,7 @@ function AdminScreen({ requests, verify }) {
     else loadApplications()
   }
 
-  return <><PageTitle eyebrow="OPERATIONS" title="BottleUp overview" body="Keep collections, verification and rewards moving." /><section className="adminStats"><Stat icon={Users} value="2" label="Users" /><Stat icon={Package} value={requests.length} label="Requests" /><Stat icon={Recycle} value={`${totalKg.toFixed(1)} kg`} label="Verified plastic" /><Stat icon={Coins} value={totalPoints} label="Points issued" /></section>
+  return <><PageTitle eyebrow="OPERATIONS" title="BottleUp overview" body="Keep collections, verification and rewards moving." /><section className="adminStats"><Stat icon={Users} value={userCount ?? '—'} label="Users" /><Stat icon={Package} value={requests.length} label="Requests" /><Stat icon={Recycle} value={`${totalKg.toFixed(1)} kg`} label="Verified plastic" /><Stat icon={Coins} value={totalPoints} label="Points issued" /></section>
 
     <section className="sectionHead"><div><span className="eyebrow">ACTION REQUIRED</span><h2>Collector applications</h2></div>{applications && <span className="queueCount">{applications.length} waiting</span>}</section>
     {appError && <div className="authMessage authError" style={{ marginBottom: 12 }}>{appError}</div>}
@@ -459,7 +559,7 @@ function AppShell({ onExit, profile, email, userId, onSaveName }) {
 
   const points = profile?.points || 0
 
-  const submitPickup = async ({ type, estimate, location, photo }) => {
+  const submitPickup = async ({ type, estimate, location, photo, coords }) => {
     let photo_url = null
     if (photo) {
       const path = `${userId}/${Date.now()}-${photo.name}`
@@ -469,6 +569,7 @@ function AppShell({ onExit, profile, email, userId, onSaveName }) {
     }
     const { error } = await supabase.from('pickup_requests').insert({
       user_id: userId, material_type: type, estimated_weight_kg: Number(estimate), pickup_location: location, photo_url,
+      latitude: coords?.lat ?? null, longitude: coords?.lng ?? null,
     })
     if (!error) { reload(); setScreen('pickups'); setNotice('Pickup request submitted.') }
     return error
@@ -482,20 +583,23 @@ function AppShell({ onExit, profile, email, userId, onSaveName }) {
 
   const content = loadingRequests ? null : role === 'collector' ? <CollectorScreen {...{ requests, userId, accept, startOnTheWay, collect }} /> : role === 'admin' ? <AdminScreen {...{ requests, verify }} /> : screen === 'home' ? <UserHome {...{ requests, setScreen, onSubmitPickup: submitPickup, profile, userId }} /> : screen === 'pickups' ? <PickupsScreen requests={requests} userId={userId} /> : screen === 'rewards' ? <RewardsScreen points={points} redeem={redeem} /> : screen === 'wallet' ? <WalletScreen points={points} /> : <ProfileScreen profile={profile} email={email} onSaveName={onSaveName} notify={setNotice} />
 
-  return <div className="app"><header className="topbar"><div className="topInner"><button className="brand brandButton" onClick={() => { setPreviewRole(null); setScreen('home') }}><Logo /><span>Bottle<span>Up</span></span></button><div className="topActions"><button className="iconButton" title="Notifications"><Bell size={18} /></button><Avatar name={profile?.full_name} email={email} size="sm" /></div></div></header><div className="appBody"><aside className="sidebar"><div className="rolePill"><span>{canPreview && previewRole ? 'PREVIEWING' : 'ACCOUNT'}</span><strong>{role === 'user' ? 'User' : role === 'collector' ? 'Collector' : 'Admin'}</strong></div>{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'navItem active' : 'navItem'} onClick={() => setScreen(id)}><Icon size={18} />{label}</button>)}<div className="sideBottom">{canPreview && <button className="navItem" onClick={() => setPreviewRole(role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user')}><Users size={18} />Preview as {role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user'}</button>}<button className="navItem" onClick={onExit}><ArrowRight size={18} />Sign out</button></div></aside><main className="main">{notice && <button className="notice" onClick={() => setNotice('')}><Check size={15} />{notice}<X size={14} /></button>}{requestsError && <div className="authMessage authError" style={{ marginBottom: 14 }}>{requestsError}</div>}{content}</main></div><nav className="mobileNav">{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'active' : ''} onClick={() => setScreen(id)}><Icon size={18} /><span>{label}</span></button>)}</nav></div>
+  return <div className="app"><header className="topbar"><div className="topInner"><button className="brand brandButton" onClick={() => { setPreviewRole(null); setScreen('home') }}><Logo /><span>Bottle<span>Up</span></span></button><div className="topActions"><button className="iconButton" title="Notifications"><Bell size={18} /></button><Avatar name={profile?.full_name} email={email} size="sm" /></div></div></header><div className="appBody"><aside className="sidebar"><div className="rolePill"><span>{canPreview && previewRole ? 'PREVIEWING' : 'ACCOUNT'}</span><strong>{role === 'user' ? 'User' : role === 'collector' ? 'Collector' : 'Admin'}</strong></div>{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'navItem active' : 'navItem'} onClick={() => setScreen(id)}><Icon size={18} />{label}</button>)}<div className="sideBottom">{canPreview && <button className="navItem" onClick={() => setPreviewRole(role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user')}><Users size={18} />Preview as {role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user'}</button>}<button className="navItem" onClick={onExit}><ArrowRight size={18} />Sign out</button></div></aside><main className="main">{notice && <button className="notice" onClick={() => setNotice('')}><Check size={15} />{notice}<X size={14} /></button>}{requestsError && <div className="authMessage authError" style={{ marginBottom: 14 }}>{requestsError}</div>}{content}</main></div><nav className="mobileNav">{role === 'user' ? nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'active' : ''} onClick={() => setScreen(id)}><Icon size={18} /><span>{label}</span></button>) : <>{canPreview && <button onClick={() => setPreviewRole(role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user')}><Users size={18} /><span>Preview</span></button>}<button onClick={onExit}><ArrowRight size={18} /><span>Sign out</span></button></>}</nav></div>
 }
 
 function App() {
-  const { session, profile, refreshProfile, loading } = useAuth()
+  const { session, profile, refreshProfile, loading, recovering, clearRecovering } = useAuth()
   const [authMode, setAuthMode] = useState(null)
+  const [legalPage, setLegalPage] = useState(null)
 
   if (supabaseConfigError) return <ConfigScreen />
   if (loading) return null
+  if (legalPage) return <LegalScreen page={legalPage} onBack={() => setLegalPage(null)} />
+  if (recovering) return <ResetPasswordScreen onDone={clearRecovering} />
 
   if (!session) {
     return authMode
       ? <AuthPanel mode={authMode} onBack={() => setAuthMode(null)} />
-      : <Landing onAuth={setAuthMode} />
+      : <Landing onAuth={setAuthMode} onLegal={setLegalPage} />
   }
 
   const onSaveName = async fullName => {
