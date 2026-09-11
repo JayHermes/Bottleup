@@ -134,7 +134,7 @@ function ConfigScreen() {
 
 function AuthPanel({ mode: initialMode, onBack }) {
   const [mode, setMode] = useState(initialMode)
-  const [fields, setFields] = useState({ fullName: '', phone: '', email: '', password: '' })
+  const [fields, setFields] = useState({ fullName: '', phone: '', email: '', password: '', wantsCollector: false })
   const [message, setMessage] = useState('')
   const [error, setError] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -148,13 +148,15 @@ function AuthPanel({ mode: initialMode, onBack }) {
     setError(false)
     try {
       const result = mode === 'signup'
-        ? await supabase.auth.signUp({ email: fields.email, password: fields.password, options: { data: { full_name: fields.fullName, phone: fields.phone } } })
+        ? await supabase.auth.signUp({ email: fields.email, password: fields.password, options: { data: { full_name: fields.fullName, phone: fields.phone, wants_collector: fields.wantsCollector } } })
         : await supabase.auth.signInWithPassword({ email: fields.email, password: fields.password })
 
       if (result.error) { setMessage(result.error.message); setError(true); return }
 
       if (mode === 'signup' && !result.data.session) {
-        setMessage('Account created. Check your email to confirm your address, then come back and sign in.')
+        setMessage(fields.wantsCollector
+          ? 'Account created. Check your email to confirm your address, then sign in — your collector application will be reviewed separately.'
+          : 'Account created. Check your email to confirm your address, then come back and sign in.')
         setError(false)
         setMode('signin')
         return
@@ -182,6 +184,7 @@ function AuthPanel({ mode: initialMode, onBack }) {
       <form className="authForm" onSubmit={submit}>
         {mode === 'signup' && <label className="authLabel">Full name<input className="authInput" required value={fields.fullName} onChange={e => set('fullName', e.target.value)} placeholder="Your name" /></label>}
         {mode === 'signup' && <label className="authLabel">Phone<input className="authInput" value={fields.phone} onChange={e => set('phone', e.target.value)} placeholder="080..." /></label>}
+        {mode === 'signup' && <label className="authCheck"><input type="checkbox" checked={fields.wantsCollector} onChange={e => set('wantsCollector', e.target.checked)} /><span>I'd like to apply to become a collector <em>(reviewed by BottleUp before it takes effect)</em></span></label>}
         <label className="authLabel">Email<input className="authInput" type="email" required value={fields.email} onChange={e => set('email', e.target.value)} placeholder="you@example.com" /></label>
         <label className="authLabel">Password<input className="authInput" type="password" required minLength={6} value={fields.password} onChange={e => set('password', e.target.value)} placeholder="At least 6 characters" /></label>
         <button className="authButton" disabled={busy} type="submit">{busy ? (mode === 'signup' ? 'Creating account…' : 'Signing in…') : mode === 'signup' ? 'Create account' : 'Sign in'}</button>
@@ -328,11 +331,58 @@ function AdminScreen({ requests, verify }) {
   const collected = requests.filter(r => r.status === 'COLLECTED')
   const verified = requests.filter(r => r.status === 'VERIFIED')
   const totalKg = verified.reduce((a, r) => a + (r.actual || 0), 0)
-  return <><PageTitle eyebrow="OPERATIONS" title="BottleUp overview" body="Keep collections, verification and rewards moving." /><section className="adminStats"><Stat icon={Users} value="2" label="Users" /><Stat icon={Package} value={requests.length} label="Requests" /><Stat icon={Recycle} value={`${totalKg.toFixed(1)} kg`} label="Verified plastic" /><Stat icon={Coins} value={verified.reduce((a, r) => a + (r.points || 0), 0)} label="Points issued" /></section><section className="sectionHead"><div><span className="eyebrow">ACTION REQUIRED</span><h2>Verification queue</h2></div><span className="queueCount">{collected.length} waiting</span></section>{collected.length ? <div className="requestList">{collected.map(r => <RequestCard key={r.id} request={r} action={<button className="primary small" onClick={() => verify(r.id)}>Verify + reward</button>} />)}</div> : <EmptyState icon={ShieldCheck} title="Queue is clear" body="Collected pickups will appear here for verification." />}<section className="sectionHead activityHead"><div><span className="eyebrow">RECENT</span><h2>All activity</h2></div></section><div className="requestList">{requests.map(r => <RequestCard key={r.id} request={r} compact />)}</div></>
+
+  const [applications, setApplications] = useState(null) // null = loading
+  const [appError, setAppError] = useState('')
+
+  const loadApplications = () => {
+    if (!supabase) return
+    supabase
+      .from('collector_applications')
+      .select('id, created_at, profiles(full_name, phone)')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true })
+      .then(({ data, error }) => {
+        if (error) setAppError(error.message)
+        else { setApplications(data); setAppError('') }
+      })
+  }
+  useEffect(loadApplications, [])
+
+  const decide = async (id, status) => {
+    const { error } = await supabase.from('collector_applications').update({ status }).eq('id', id)
+    if (error) setAppError(error.message)
+    else loadApplications()
+  }
+
+  return <><PageTitle eyebrow="OPERATIONS" title="BottleUp overview" body="Keep collections, verification and rewards moving." /><section className="adminStats"><Stat icon={Users} value="2" label="Users" /><Stat icon={Package} value={requests.length} label="Requests" /><Stat icon={Recycle} value={`${totalKg.toFixed(1)} kg`} label="Verified plastic" /><Stat icon={Coins} value={verified.reduce((a, r) => a + (r.points || 0), 0)} label="Points issued" /></section>
+
+    <section className="sectionHead"><div><span className="eyebrow">ACTION REQUIRED</span><h2>Collector applications</h2></div>{applications && <span className="queueCount">{applications.length} waiting</span>}</section>
+    {appError && <div className="authMessage authError" style={{ marginBottom: 12 }}>{appError}</div>}
+    {applications === null ? null : applications.length ? (
+      <div className="requestList">{applications.map(a => (
+        <article className="requestCard" key={a.id}>
+          <div className="requestTop">
+            <div className="requestIcon"><UserRound size={18} /></div>
+            <div className="requestMain">
+              <div className="requestTitle">{a.profiles?.full_name || 'Unnamed applicant'}</div>
+              <div className="requestMeta"><span>{a.profiles?.phone || 'No phone on file'}</span><span>Applied {new Date(a.created_at).toLocaleDateString()}</span></div>
+            </div>
+          </div>
+          <div className="requestBottom"><span /><div style={{ display: 'flex', gap: 8 }}><button className="secondary small" onClick={() => decide(a.id, 'rejected')}>Reject</button><button className="primary small" onClick={() => decide(a.id, 'approved')}>Approve collector</button></div></div>
+        </article>
+      ))}</div>
+    ) : <EmptyState icon={UserRound} title="No pending applications" body="New collector requests from signup will appear here." />}
+
+    <section className="sectionHead"><div><span className="eyebrow">ACTION REQUIRED</span><h2>Verification queue</h2></div><span className="queueCount">{collected.length} waiting</span></section>{collected.length ? <div className="requestList">{collected.map(r => <RequestCard key={r.id} request={r} action={<button className="primary small" onClick={() => verify(r.id)}>Verify + reward</button>} />)}</div> : <EmptyState icon={ShieldCheck} title="Queue is clear" body="Collected pickups will appear here for verification." />}<section className="sectionHead activityHead"><div><span className="eyebrow">RECENT</span><h2>All activity</h2></div></section><div className="requestList">{requests.map(r => <RequestCard key={r.id} request={r} compact />)}</div></>
 }
 
 function AppShell({ onExit, profile, email, onSaveName }) {
-  const [role, setRole] = useState('user')
+  const realRole = profile?.role || 'user' // source of truth: the profiles table, protected by RLS + a trigger no client can bypass
+  const [previewRole, setPreviewRole] = useState(null) // only ever used when realRole === 'admin'
+  const role = realRole === 'admin' ? (previewRole || 'admin') : realRole
+  const canPreview = realRole === 'admin'
+
   const [screen, setScreen] = useState('home')
   const [requests, setRequests] = useState(initialRequests)
   const [form, setForm] = useState({ type: PLASTIC_TYPES[0], estimate: '', location: '' })
@@ -348,7 +398,7 @@ function AppShell({ onExit, profile, email, onSaveName }) {
 
   const content = role === 'collector' ? <CollectorScreen {...{ requests, accept, collect }} /> : role === 'admin' ? <AdminScreen {...{ requests, verify }} /> : screen === 'home' ? <UserHome {...{ requests, setScreen, form, setForm, submit }} /> : screen === 'pickups' ? <PickupsScreen requests={requests} /> : screen === 'rewards' ? <RewardsScreen points={points} redeem={redeem} /> : screen === 'wallet' ? <WalletScreen points={points} /> : <ProfileScreen profile={profile} email={email} onSaveName={onSaveName} notify={setNotice} />
 
-  return <div className="app"><header className="topbar"><div className="topInner"><button className="brand brandButton" onClick={() => { setRole('user'); setScreen('home') }}><Logo /><span>Bottle<span>Up</span></span></button><div className="topActions"><button className="iconButton" title="Notifications"><Bell size={18} /></button><Avatar name={profile?.full_name} email={email} size="sm" /></div></div></header><div className="appBody"><aside className="sidebar"><div className="rolePill"><span>PREVIEW</span><strong>{role === 'user' ? 'User' : role === 'collector' ? 'Collector' : 'Admin'}</strong></div>{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'navItem active' : 'navItem'} onClick={() => setScreen(id)}><Icon size={18} />{label}</button>)}<div className="sideBottom"><button className="navItem" onClick={() => setRole(role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user')}><Users size={18} />Switch preview role</button><button className="navItem" onClick={onExit}><ArrowRight size={18} />Sign out</button></div></aside><main className="main">{notice && <button className="notice" onClick={() => setNotice('')}><Check size={15} />{notice}<X size={14} /></button>}{content}</main></div><nav className="mobileNav">{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'active' : ''} onClick={() => setScreen(id)}><Icon size={18} /><span>{label}</span></button>)}</nav></div>
+  return <div className="app"><header className="topbar"><div className="topInner"><button className="brand brandButton" onClick={() => { setPreviewRole(null); setScreen('home') }}><Logo /><span>Bottle<span>Up</span></span></button><div className="topActions"><button className="iconButton" title="Notifications"><Bell size={18} /></button><Avatar name={profile?.full_name} email={email} size="sm" /></div></div></header><div className="appBody"><aside className="sidebar"><div className="rolePill"><span>{canPreview && previewRole ? 'PREVIEWING' : 'ACCOUNT'}</span><strong>{role === 'user' ? 'User' : role === 'collector' ? 'Collector' : 'Admin'}</strong></div>{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'navItem active' : 'navItem'} onClick={() => setScreen(id)}><Icon size={18} />{label}</button>)}<div className="sideBottom">{canPreview && <button className="navItem" onClick={() => setPreviewRole(role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user')}><Users size={18} />Preview as {role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user'}</button>}<button className="navItem" onClick={onExit}><ArrowRight size={18} />Sign out</button></div></aside><main className="main">{notice && <button className="notice" onClick={() => setNotice('')}><Check size={15} />{notice}<X size={14} /></button>}{content}</main></div><nav className="mobileNav">{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'active' : ''} onClick={() => setScreen(id)}><Icon size={18} /><span>{label}</span></button>)}</nav></div>
 }
 
 function App() {
