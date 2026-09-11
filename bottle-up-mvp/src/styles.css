@@ -84,3 +84,61 @@
 .authError{background:#3b201e;color:#f4b4ae}
 .authConfig{background:#3c3016;color:var(--gold-soft)}
 .authNote{margin-top:18px;color:var(--muted);opacity:.75;font-size:10px;line-height:1.5;text-align:center}
+
+/* ============================================================
+   V1.3 additions — real avatars, themed form fields, motion
+   ============================================================ */
+
+/* --- Avatars: initials + a distinct color per person, not one flat green --- */
+.avatar{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;font-weight:800;font-family:var(--font-display);flex:none;line-height:1}
+.avatar-sm{width:34px;height:34px;font-size:12px}
+.avatar-md{width:44px;height:44px;font-size:14px}
+.avatar-lg{width:56px;height:56px;font-size:19px}
+.avatar.t1{background:linear-gradient(150deg,var(--green),var(--green-strong))}
+.avatar.t2{background:linear-gradient(150deg,#e2ad4f,#b9822c)}
+.avatar.t3{background:linear-gradient(150deg,#3f9bd1,#2b6d94)}
+.avatar.t4{background:linear-gradient(150deg,#5be394,#26a65f)}
+.avatar.t5{background:linear-gradient(150deg,#c17ee0,#8a4fac)}
+
+/* --- Profile card: real flex layout instead of stacked/unstyled blocks --- */
+.profileCard{display:flex;align-items:center;gap:14px;padding:16px 18px;margin-top:14px;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface)}
+.profileIdentity{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.profileIdentity strong{font-size:15px}
+.profileIdentity span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* --- Themed form fields (previously fell back to raw browser white boxes) --- */
+.pickupForm select,.pickupForm input{
+  width:100%;box-sizing:border-box;border:1px solid var(--line);background:var(--surface);color:var(--cream);
+  border-radius:12px;padding:12px 13px;font:inherit;appearance:none;-webkit-appearance:none;
+}
+.pickupForm select{
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%239bb0a6' stroke-width='2'><path d='M6 8l4 4 4-4'/></svg>");
+  background-repeat:no-repeat;background-position:right 13px center;padding-right:34px;
+}
+.pickupForm input::placeholder{color:var(--muted)}
+.pickupForm input:focus,.pickupForm select:focus{border-color:var(--green);outline:none}
+.pickupForm .inputWithIcon input{padding-left:36px}
+
+/* ============================================================
+   Motion — a few deliberate places, not everywhere
+   ============================================================ */
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+
+@media(prefers-reduced-motion:no-preference){
+  .hero,.jarHero,.authCard,.pageTitle,.rewardHero{animation:fadeUp .5s ease both}
+  .loopStep{animation:fadeUp .5s ease both}
+  .loopStep:nth-child(3){animation-delay:.08s}
+  .loopStep:nth-child(5){animation-delay:.16s}
+  .loopStep:nth-child(7){animation-delay:.24s}
+  .notice{animation:slideDown .3s ease both}
+
+  .requestCard,.rewardCard,.settingsList>div{transition:transform .16s ease,border-color .16s ease}
+  .requestCard:hover,.rewardCard:hover{transform:translateY(-2px);border-color:var(--green)}
+
+  .primary,.secondary,.ghostButton,.authButton,.authTab{transition:transform .12s ease,background .15s ease,border-color .15s ease}
+  .primary:active,.secondary:active,.authButton:active{transform:scale(.97)}
+
+  .bottleGauge g rect{transition:y .6s cubic-bezier(.22,1,.36,1)}
+  .progress>span{transition:width .5s ease}
+}
