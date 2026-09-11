@@ -1,11 +1,40 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   ArrowRight, Bell, Camera, Check, ChevronRight, Coins, Gift, Home, Leaf,
-  MapPin, Package, Recycle, ShieldCheck, Truck, UserRound, Users,
+  MapPin, Package, Pencil, Recycle, ShieldCheck, Truck, UserRound, Users,
   WalletCards, Weight, X
 } from 'lucide-react'
 import './styles.css'
+import { supabase, supabaseConfigError } from './lib/supabase.js'
+
+function useAuth() {
+  const [session, setSession] = useState(undefined) // undefined = still checking, null = signed out
+  const [profile, setProfile] = useState(null)
+
+  useEffect(() => {
+    if (!supabase) { setSession(null); return }
+    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null))
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => setSession(newSession ?? null))
+    return () => sub.subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (!supabase || !session) { setProfile(null); return }
+    let cancelled = false
+    supabase.from('profiles').select('id, full_name, role, points, city').eq('id', session.user.id).single()
+      .then(({ data, error }) => { if (!cancelled) setProfile(error ? null : data) })
+    return () => { cancelled = true }
+  }, [session])
+
+  const refreshProfile = () => {
+    if (!supabase || !session) return
+    supabase.from('profiles').select('id, full_name, role, points, city').eq('id', session.user.id).single()
+      .then(({ data, error }) => setProfile(error ? null : data))
+  }
+
+  return { session, profile, refreshProfile, loading: session === undefined }
+}
 
 const PLASTIC_TYPES = ['PET Bottles', 'Plastic Containers', 'HDPE Plastic', 'Mixed Plastic']
 const STAGES = ['Submitted', 'Accepted', 'Collected', 'Verified']
@@ -51,16 +80,16 @@ function Logo({ size = 34 }) {
   return <div className="logoMark" style={{ width: size, height: size }} aria-hidden="true"><Recycle size={size * .62} strokeWidth={2.7} /></div>
 }
 
-function Landing({ enter }) {
+function Landing({ onAuth }) {
   return <div className="landing">
-    <header className="landingNav"><div className="brand"><Logo /><span>Bottle<span>Up</span></span></div><button className="ghostButton" onClick={enter}>Open BottleUp <ArrowRight size={15} /></button></header>
+    <header className="landingNav"><div className="brand"><Logo /><span>Bottle<span>Up</span></span></div><button className="ghostButton" onClick={() => onAuth('signin')}>Sign in <ArrowRight size={15} /></button></header>
     <main>
       <section className="landingHero">
         <div className="landingCopy">
           <span className="eyebrow"><Leaf size={13} />RECYCLING THAT COMES BACK TO YOU</span>
           <h1>Don’t throw it away.<br /><em>Put it to work.</em></h1>
           <p>BottleUp makes recycling easier. Schedule a pickup, get your materials collected and verified, then earn points you can use for rewards.</p>
-          <div className="landingActions"><button className="primary large" onClick={enter}>Start recycling <ArrowRight size={17} /></button><a href="#how">See how it works</a></div>
+          <div className="landingActions"><button className="primary large" onClick={() => onAuth('signup')}>Start recycling <ArrowRight size={17} /></button><a href="#how">See how it works</a></div>
         </div>
         <div className="landingVisual"><div className="bottleIllustration"><Recycle size={92} strokeWidth={1.2} /><span>RECYCLE<br />REPEAT<br />REWARD</span></div><div className="floatCard"><Check size={16} /><div><strong>Collection verified</strong><span>5.2 kg · +520 points</span></div></div></div>
       </section>
@@ -80,6 +109,70 @@ function Landing({ enter }) {
       <section className="landingReward"><div><span className="eyebrow">EARN AS YOU RECYCLE</span><h2>1 kg of verified plastic = <strong>100 points.</strong></h2><p>Your points build with every verified collection. Rewards shown in the pilot can be redeemed once the corresponding reward partner is active.</p></div><div className="pointPill"><Coins size={19} /><strong>100</strong><span>points / kg</span></div></section>
     </main>
     <footer className="landingFooter"><div className="brand"><Logo size={28} /><span>Bottle<span>Up</span></span></div><span>Recycle better. Track it. Get rewarded.</span></footer>
+  </div>
+}
+
+function ConfigScreen() {
+  return <div className="authGate"><div className="authCard"><div className="authBrand"><Logo /><span>Bottle<span>Up</span></span></div><h1 className="authTitle">Supabase is not configured</h1><p className="authCopy">Add the Supabase Project URL and browser-safe publishable/anon key to the deployment environment.</p><div className="authMessage authConfig">{supabaseConfigError || 'No valid Supabase configuration was found.'}</div></div></div>
+}
+
+function AuthPanel({ mode: initialMode, onBack }) {
+  const [mode, setMode] = useState(initialMode)
+  const [fields, setFields] = useState({ fullName: '', phone: '', email: '', password: '' })
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const set = (key, value) => setFields(f => ({ ...f, [key]: value }))
+
+  const submit = async e => {
+    e.preventDefault()
+    setBusy(true)
+    setMessage('')
+    setError(false)
+    try {
+      const result = mode === 'signup'
+        ? await supabase.auth.signUp({ email: fields.email, password: fields.password, options: { data: { full_name: fields.fullName, phone: fields.phone } } })
+        : await supabase.auth.signInWithPassword({ email: fields.email, password: fields.password })
+
+      if (result.error) { setMessage(result.error.message); setError(true); return }
+
+      if (mode === 'signup' && !result.data.session) {
+        setMessage('Account created. Check your email to confirm your address, then come back and sign in.')
+        setError(false)
+        setMode('signin')
+        return
+      }
+      // A session now exists — the useAuth listener at the top level picks it up
+      // and swaps this panel for the real app automatically.
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Authentication failed. Please try again.')
+      setError(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <div className="authGate">
+    <div className="authCard">
+      <button className="iconButton authBack" onClick={onBack}><X size={18} /></button>
+      <div className="authBrand"><Logo /><span>Bottle<span>Up</span></span></div>
+      <h1 className="authTitle">Recycle. Reward. Repeat.</h1>
+      <p className="authCopy">Create your BottleUp account or sign in to schedule pickups and keep your recycling activity attached to your account.</p>
+      <div className="authTabs">
+        <button className={`authTab ${mode === 'signin' ? 'active' : ''}`} type="button" onClick={() => { setMode('signin'); setMessage('') }}>Sign in</button>
+        <button className={`authTab ${mode === 'signup' ? 'active' : ''}`} type="button" onClick={() => { setMode('signup'); setMessage('') }}>Create account</button>
+      </div>
+      <form className="authForm" onSubmit={submit}>
+        {mode === 'signup' && <label className="authLabel">Full name<input className="authInput" required value={fields.fullName} onChange={e => set('fullName', e.target.value)} placeholder="Your name" /></label>}
+        {mode === 'signup' && <label className="authLabel">Phone<input className="authInput" value={fields.phone} onChange={e => set('phone', e.target.value)} placeholder="080..." /></label>}
+        <label className="authLabel">Email<input className="authInput" type="email" required value={fields.email} onChange={e => set('email', e.target.value)} placeholder="you@example.com" /></label>
+        <label className="authLabel">Password<input className="authInput" type="password" required minLength={6} value={fields.password} onChange={e => set('password', e.target.value)} placeholder="At least 6 characters" /></label>
+        <button className="authButton" disabled={busy} type="submit">{busy ? (mode === 'signup' ? 'Creating account…' : 'Signing in…') : mode === 'signup' ? 'Create account' : 'Sign in'}</button>
+        {message && <div className={`authMessage ${error ? 'authError' : ''}`}>{message}</div>}
+      </form>
+      <div className="authNote">Your account is secured by Supabase Auth. Your pickup data is tied to your authenticated user.</div>
+    </div>
   </div>
 }
 
@@ -168,8 +261,45 @@ function WalletScreen({ points }) {
   return <><PageTitle eyebrow="BOTTLEUP WALLET" title="Wallet" body="Keep track of what you've earned and what is pending." /><div className="walletGrid"><div className="walletMain"><span>Available reward value</span><strong>₦{Math.floor(points / 500) * 1000 .toLocaleString()}</strong><small>based on redeemable rewards currently shown</small></div><div className="walletStat"><span>Total earned</span><strong>{points.toLocaleString()} pts</strong></div><div className="walletStat"><span>Pending rewards</span><strong>0</strong></div></div><div className="pilotNote"><WalletCards size={17} /><div><strong>Redemption, not cash withdrawal</strong><span>The MVP treats BottleUp Wallet as a reward balance. Cash-out infrastructure is intentionally not part of this pilot.</span></div></div></>
 }
 
-function ProfileScreen() {
-  return <><PageTitle eyebrow="YOUR ACCOUNT" title="Profile" body="Your BottleUp account and collection preferences." /><div className="profileCard"><div className="avatar">Y</div><div><strong>You</strong><span>Uyo, Nigeria</span></div><ChevronRight size={18} /></div><div className="settingsList"><div><div><MapPin size={17} /><span>Saved addresses</span></div><ChevronRight size={17} /></div><div><div><Truck size={17} /><span>Pickup preferences</span></div><ChevronRight size={17} /></div><div><div><WalletCards size={17} /><span>Payment & wallet</span></div><ChevronRight size={17} /></div><div><div><ShieldCheck size={17} /><span>Support</span></div><ChevronRight size={17} /></div></div></>
+function ProfileScreen({ profile, email, onSaveName, notify }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(profile?.full_name || '')
+  const [saving, setSaving] = useState(false)
+
+  const startEdit = () => { setDraft(profile?.full_name || ''); setEditing(true) }
+  const save = async () => {
+    setSaving(true)
+    await onSaveName(draft.trim())
+    setSaving(false)
+    setEditing(false)
+  }
+
+  const initial = (profile?.full_name || email || '?').trim().charAt(0).toUpperCase()
+  const placeholderRows = [
+    [MapPin, 'Saved addresses'],
+    [Truck, 'Pickup preferences'],
+    [WalletCards, 'Payment & wallet'],
+    [ShieldCheck, 'Support'],
+  ]
+
+  return <>
+    <PageTitle eyebrow="YOUR ACCOUNT" title="Profile" body="Your BottleUp account and collection preferences." />
+    <div className="profileCard">
+      <div className="avatar">{initial}</div>
+      {editing ? (
+        <div className="profileEdit">
+          <input className="authInput" autoFocus value={draft} onChange={e => setDraft(e.target.value)} placeholder="Your name" />
+          <div className="profileEditActions"><button className="primary small" disabled={saving || !draft.trim()} onClick={save}>{saving ? 'Saving…' : 'Save'}</button><button className="secondary small" onClick={() => setEditing(false)}>Cancel</button></div>
+        </div>
+      ) : (
+        <><div><strong>{profile?.full_name || 'Add your name'}</strong><span>{email}</span></div><button className="iconButton" onClick={startEdit} title="Edit name"><Pencil size={16} /></button></>
+      )}
+    </div>
+    <div className="settingsList">
+      {placeholderRows.map(([Icon, label]) => <div key={label} onClick={() => notify(`${label} is coming soon.`)}><div><Icon size={17} /><span>{label}</span></div><ChevronRight size={17} /></div>)}
+    </div>
+    <button className="secondary" style={{ marginTop: 18 }} onClick={() => supabase.auth.signOut()}>Sign out</button>
+  </>
 }
 
 function CollectorScreen({ requests, accept, collect }) {
@@ -186,7 +316,7 @@ function AdminScreen({ requests, verify }) {
   return <><PageTitle eyebrow="OPERATIONS" title="BottleUp overview" body="Keep collections, verification and rewards moving." /><section className="adminStats"><Stat icon={Users} value="2" label="Users" /><Stat icon={Package} value={requests.length} label="Requests" /><Stat icon={Recycle} value={`${totalKg.toFixed(1)} kg`} label="Verified plastic" /><Stat icon={Coins} value={verified.reduce((a, r) => a + (r.points || 0), 0)} label="Points issued" /></section><section className="sectionHead"><div><span className="eyebrow">ACTION REQUIRED</span><h2>Verification queue</h2></div><span className="queueCount">{collected.length} waiting</span></section>{collected.length ? <div className="requestList">{collected.map(r => <RequestCard key={r.id} request={r} action={<button className="primary small" onClick={() => verify(r.id)}>Verify + reward</button>} />)}</div> : <EmptyState icon={ShieldCheck} title="Queue is clear" body="Collected pickups will appear here for verification." />}<section className="sectionHead activityHead"><div><span className="eyebrow">RECENT</span><h2>All activity</h2></div></section><div className="requestList">{requests.map(r => <RequestCard key={r.id} request={r} compact />)}</div></>
 }
 
-function AppShell({ onExit }) {
+function AppShell({ onExit, profile, email, onSaveName }) {
   const [role, setRole] = useState('user')
   const [screen, setScreen] = useState('home')
   const [requests, setRequests] = useState(initialRequests)
@@ -201,14 +331,31 @@ function AppShell({ onExit }) {
   const redeem = reward => { if (points >= reward.cost) setNotice(`${reward.name} redemption request received.`) }
   const nav = [{ id: 'home', label: 'Home', icon: Home }, { id: 'pickups', label: 'Pickups', icon: Package }, { id: 'rewards', label: 'Rewards', icon: Gift }, { id: 'wallet', label: 'Wallet', icon: WalletCards }, { id: 'profile', label: 'Profile', icon: UserRound }]
 
-  const content = role === 'collector' ? <CollectorScreen {...{ requests, accept, collect }} /> : role === 'admin' ? <AdminScreen {...{ requests, verify }} /> : screen === 'home' ? <UserHome {...{ requests, setScreen, form, setForm, submit }} /> : screen === 'pickups' ? <PickupsScreen requests={requests} /> : screen === 'rewards' ? <RewardsScreen points={points} redeem={redeem} /> : screen === 'wallet' ? <WalletScreen points={points} /> : <ProfileScreen />
+  const content = role === 'collector' ? <CollectorScreen {...{ requests, accept, collect }} /> : role === 'admin' ? <AdminScreen {...{ requests, verify }} /> : screen === 'home' ? <UserHome {...{ requests, setScreen, form, setForm, submit }} /> : screen === 'pickups' ? <PickupsScreen requests={requests} /> : screen === 'rewards' ? <RewardsScreen points={points} redeem={redeem} /> : screen === 'wallet' ? <WalletScreen points={points} /> : <ProfileScreen profile={profile} email={email} onSaveName={onSaveName} notify={setNotice} />
 
-  return <div className="app"><header className="topbar"><div className="topInner"><button className="brand brandButton" onClick={() => { setRole('user'); setScreen('home') }}><Logo /><span>Bottle<span>Up</span></span></button><div className="topActions"><button className="iconButton" title="Notifications"><Bell size={18} /></button><button className="avatar miniAvatar">{role === 'user' ? 'Y' : role === 'collector' ? 'C' : 'A'}</button></div></div></header><div className="appBody"><aside className="sidebar"><div className="rolePill"><span>PREVIEW</span><strong>{role === 'user' ? 'User' : role === 'collector' ? 'Collector' : 'Admin'}</strong></div>{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'navItem active' : 'navItem'} onClick={() => setScreen(id)}><Icon size={18} />{label}</button>)}<div className="sideBottom"><button className="navItem" onClick={() => setRole(role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user')}><Users size={18} />Switch preview role</button><button className="navItem" onClick={onExit}><ArrowRight size={18} />Back to landing</button></div></aside><main className="main">{notice && <button className="notice" onClick={() => setNotice('')}><Check size={15} />{notice}<X size={14} /></button>}{content}</main></div><nav className="mobileNav">{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'active' : ''} onClick={() => setScreen(id)}><Icon size={18} /><span>{label}</span></button>)}</nav></div>
+  return <div className="app"><header className="topbar"><div className="topInner"><button className="brand brandButton" onClick={() => { setRole('user'); setScreen('home') }}><Logo /><span>Bottle<span>Up</span></span></button><div className="topActions"><button className="iconButton" title="Notifications"><Bell size={18} /></button><button className="avatar miniAvatar">{role === 'user' ? 'Y' : role === 'collector' ? 'C' : 'A'}</button></div></div></header><div className="appBody"><aside className="sidebar"><div className="rolePill"><span>PREVIEW</span><strong>{role === 'user' ? 'User' : role === 'collector' ? 'Collector' : 'Admin'}</strong></div>{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'navItem active' : 'navItem'} onClick={() => setScreen(id)}><Icon size={18} />{label}</button>)}<div className="sideBottom"><button className="navItem" onClick={() => setRole(role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user')}><Users size={18} />Switch preview role</button><button className="navItem" onClick={onExit}><ArrowRight size={18} />Sign out</button></div></aside><main className="main">{notice && <button className="notice" onClick={() => setNotice('')}><Check size={15} />{notice}<X size={14} /></button>}{content}</main></div><nav className="mobileNav">{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'active' : ''} onClick={() => setScreen(id)}><Icon size={18} /><span>{label}</span></button>)}</nav></div>
 }
 
 function App() {
-  const [started, setStarted] = useState(false)
-  return started ? <AppShell onExit={() => setStarted(false)} /> : <Landing enter={() => setStarted(true)} />
+  const { session, profile, refreshProfile, loading } = useAuth()
+  const [authMode, setAuthMode] = useState(null)
+
+  if (supabaseConfigError) return <ConfigScreen />
+  if (loading) return null
+
+  if (!session) {
+    return authMode
+      ? <AuthPanel mode={authMode} onBack={() => setAuthMode(null)} />
+      : <Landing onAuth={setAuthMode} />
+  }
+
+  const onSaveName = async fullName => {
+    if (!fullName) return
+    const { error } = await supabase.from('profiles').update({ full_name: fullName }).eq('id', session.user.id)
+    if (!error) refreshProfile()
+  }
+
+  return <AppShell onExit={() => supabase.auth.signOut()} profile={profile} email={session.user.email} onSaveName={onSaveName} />
 }
 
 createRoot(document.getElementById('root')).render(<App />)
