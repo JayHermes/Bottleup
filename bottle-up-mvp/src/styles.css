@@ -157,3 +157,20 @@
 .collectAction .inputWithIcon{width:100px}
 .collectAction input{width:100%;box-sizing:border-box;border:1px solid var(--line);background:var(--ink);color:var(--cream);border-radius:10px;padding:9px 10px 9px 30px;font:inherit}
 .collectAction input:focus{border-color:var(--green);outline:none}
+
+/* ============================================================
+   V1.8 additions — password reset, GPS capture, legal pages,
+   mobile sign-out for collector/admin, real user count
+   ============================================================ */
+.authForgot{background:none;border:0;color:var(--green-bright);font-size:12px;font-weight:700;cursor:pointer;padding:2px 0;text-align:left;justify-self:start}
+
+.locateButton{display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px dashed var(--line);color:var(--cream);border-radius:12px;padding:11px 13px;font-size:12.5px;font-weight:700;cursor:pointer;text-align:left}
+.locateButton span{font-weight:500;color:var(--muted);margin-left:2px}
+.locateButton:disabled{opacity:.65;cursor:wait}
+
+.legalCard{max-width:560px;max-height:82vh;overflow-y:auto}
+.legalBody{margin-top:18px;display:grid;gap:14px}
+.legalBody h2{font-size:14px;font-family:var(--font-display)}
+.legalBody p{font-size:12.5px;line-height:1.65;color:var(--muted);margin:4px 0 0}
+.legalLinks{display:flex;gap:14px;margin-top:10px}
+.legalLinks button{background:none;border:0;color:var(--muted);font-size:11.5px;text-decoration:underline;cursor:pointer;padding:0}
