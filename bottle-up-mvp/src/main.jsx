@@ -409,7 +409,7 @@ function AdminScreen({ requests, verify }) {
     if (!supabase) return
     supabase
       .from('collector_applications')
-      .select('id, created_at, profiles(full_name, phone)')
+      .select('id, created_at, profiles!user_id(full_name, phone)')
       .eq('status', 'pending')
       .order('created_at', { ascending: true })
       .then(({ data, error }) => {
