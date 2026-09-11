@@ -61,7 +61,7 @@ const initialRequests = [
 function BottleGauge({ progress = 0 }) {
   const fillPct = Math.round(progress * 100)
   return (
-    <svg width={64} height={92} viewBox="0 0 64 92" xmlns="http://www.w3.org/2000/svg" role="img" aria-label={`${fillPct}% to next tier`}>
+    <svg className="bottleGauge" width={64} height={92} viewBox="0 0 64 92" xmlns="http://www.w3.org/2000/svg" role="img" aria-label={`${fillPct}% to next tier`}>
       <defs>
         <clipPath id="jarClip"><path d="M22 6h20v8c5 2 8 6.6 8 12v50c0 4.4-3.6 8-8 8H22c-4.4 0-8-3.6-8-8V26c0-5.4 3-10 8-12V6Z" /></clipPath>
         <linearGradient id="jarFill" x1="0" y1="1" x2="0" y2="0">
@@ -78,6 +78,22 @@ function BottleGauge({ progress = 0 }) {
 
 function Logo({ size = 34 }) {
   return <div className="logoMark" style={{ width: size, height: size }} aria-hidden="true"><Recycle size={size * .62} strokeWidth={2.7} /></div>
+}
+
+const AVATAR_TONES = ['t1', 't2', 't3', 't4', 't5']
+function initials(name, email) {
+  const s = (name || '').trim()
+  if (s) { const parts = s.split(/\s+/); return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase() }
+  return (email || '?').trim().charAt(0).toUpperCase()
+}
+function avatarTone(name, email) {
+  const s = (name || email || '?')
+  let hash = 0
+  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0
+  return AVATAR_TONES[hash % AVATAR_TONES.length]
+}
+function Avatar({ name, email, size = 'md' }) {
+  return <span className={`avatar avatar-${size} ${avatarTone(name, email)}`}>{initials(name, email)}</span>
 }
 
 function Landing({ onAuth }) {
@@ -274,7 +290,6 @@ function ProfileScreen({ profile, email, onSaveName, notify }) {
     setEditing(false)
   }
 
-  const initial = (profile?.full_name || email || '?').trim().charAt(0).toUpperCase()
   const placeholderRows = [
     [MapPin, 'Saved addresses'],
     [Truck, 'Pickup preferences'],
@@ -285,14 +300,14 @@ function ProfileScreen({ profile, email, onSaveName, notify }) {
   return <>
     <PageTitle eyebrow="YOUR ACCOUNT" title="Profile" body="Your BottleUp account and collection preferences." />
     <div className="profileCard">
-      <div className="avatar">{initial}</div>
+      <Avatar name={profile?.full_name} email={email} size="lg" />
       {editing ? (
         <div className="profileEdit">
           <input className="authInput" autoFocus value={draft} onChange={e => setDraft(e.target.value)} placeholder="Your name" />
           <div className="profileEditActions"><button className="primary small" disabled={saving || !draft.trim()} onClick={save}>{saving ? 'Saving…' : 'Save'}</button><button className="secondary small" onClick={() => setEditing(false)}>Cancel</button></div>
         </div>
       ) : (
-        <><div><strong>{profile?.full_name || 'Add your name'}</strong><span>{email}</span></div><button className="iconButton" onClick={startEdit} title="Edit name"><Pencil size={16} /></button></>
+        <><div className="profileIdentity"><strong>{profile?.full_name || 'Add your name'}</strong><span>{email}</span></div><button className="iconButton" onClick={startEdit} title="Edit name"><Pencil size={16} /></button></>
       )}
     </div>
     <div className="settingsList">
@@ -333,7 +348,7 @@ function AppShell({ onExit, profile, email, onSaveName }) {
 
   const content = role === 'collector' ? <CollectorScreen {...{ requests, accept, collect }} /> : role === 'admin' ? <AdminScreen {...{ requests, verify }} /> : screen === 'home' ? <UserHome {...{ requests, setScreen, form, setForm, submit }} /> : screen === 'pickups' ? <PickupsScreen requests={requests} /> : screen === 'rewards' ? <RewardsScreen points={points} redeem={redeem} /> : screen === 'wallet' ? <WalletScreen points={points} /> : <ProfileScreen profile={profile} email={email} onSaveName={onSaveName} notify={setNotice} />
 
-  return <div className="app"><header className="topbar"><div className="topInner"><button className="brand brandButton" onClick={() => { setRole('user'); setScreen('home') }}><Logo /><span>Bottle<span>Up</span></span></button><div className="topActions"><button className="iconButton" title="Notifications"><Bell size={18} /></button><button className="avatar miniAvatar">{role === 'user' ? 'Y' : role === 'collector' ? 'C' : 'A'}</button></div></div></header><div className="appBody"><aside className="sidebar"><div className="rolePill"><span>PREVIEW</span><strong>{role === 'user' ? 'User' : role === 'collector' ? 'Collector' : 'Admin'}</strong></div>{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'navItem active' : 'navItem'} onClick={() => setScreen(id)}><Icon size={18} />{label}</button>)}<div className="sideBottom"><button className="navItem" onClick={() => setRole(role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user')}><Users size={18} />Switch preview role</button><button className="navItem" onClick={onExit}><ArrowRight size={18} />Sign out</button></div></aside><main className="main">{notice && <button className="notice" onClick={() => setNotice('')}><Check size={15} />{notice}<X size={14} /></button>}{content}</main></div><nav className="mobileNav">{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'active' : ''} onClick={() => setScreen(id)}><Icon size={18} /><span>{label}</span></button>)}</nav></div>
+  return <div className="app"><header className="topbar"><div className="topInner"><button className="brand brandButton" onClick={() => { setRole('user'); setScreen('home') }}><Logo /><span>Bottle<span>Up</span></span></button><div className="topActions"><button className="iconButton" title="Notifications"><Bell size={18} /></button><Avatar name={profile?.full_name} email={email} size="sm" /></div></div></header><div className="appBody"><aside className="sidebar"><div className="rolePill"><span>PREVIEW</span><strong>{role === 'user' ? 'User' : role === 'collector' ? 'Collector' : 'Admin'}</strong></div>{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'navItem active' : 'navItem'} onClick={() => setScreen(id)}><Icon size={18} />{label}</button>)}<div className="sideBottom"><button className="navItem" onClick={() => setRole(role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user')}><Users size={18} />Switch preview role</button><button className="navItem" onClick={onExit}><ArrowRight size={18} />Sign out</button></div></aside><main className="main">{notice && <button className="notice" onClick={() => setNotice('')}><Check size={15} />{notice}<X size={14} /></button>}{content}</main></div><nav className="mobileNav">{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'active' : ''} onClick={() => setScreen(id)}><Icon size={18} /><span>{label}</span></button>)}</nav></div>
 }
 
 function App() {
