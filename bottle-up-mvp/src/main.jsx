@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import './styles.css'
 import { supabase, supabaseConfigError } from './lib/supabase.js'
-import { geocode } from './lib/mapbox.js'
+import { geocode, staticMapUrl } from './lib/mapbox.js'
 
 function useAuth() {
   const [session, setSession] = useState(undefined) // undefined = still checking, null = signed out
@@ -432,6 +432,7 @@ function PickupModal({ onSubmit, close }) {
       <button type="button" className="locateButton" onClick={useMyLocation} disabled={locating}>
         {coords ? <><Check size={14} />Precise location captured</> : locating ? 'Getting your location…' : <><MapPin size={14} />Add my precise location <span>(optional, helps collectors find you)</span></>}
       </button>
+      {coords && staticMapUrl(coords.lat, coords.lng) && <img className="locateMap" src={staticMapUrl(coords.lat, coords.lng)} alt="Your captured pickup location" />}
       {locateError && <div className="authMessage authError">{locateError}</div>}
       <div className="formNote"><ShieldCheck size={15} /> Final points are based on verified weight after collection.</div>
       {error && <div className="authMessage authError">{error}</div>}
