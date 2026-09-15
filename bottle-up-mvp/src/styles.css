@@ -197,3 +197,8 @@
 .status.pending{background:#3c3016;color:var(--gold-soft)}
 .status.fulfilled{background:#153c26;color:var(--green-bright)}
 .status.rejected{background:#3a1e1a;color:#f0a99b}
+
+/* ============================================================
+   V2.1 addition — visible pin preview for captured location
+   ============================================================ */
+.locateMap{width:100%;border-radius:12px;border:1px solid var(--line);display:block;margin-top:-2px}
