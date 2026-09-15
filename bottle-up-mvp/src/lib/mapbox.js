@@ -19,3 +19,11 @@ export async function geocode(query) {
     return null
   }
 }
+
+// A plain <img> URL showing a pin at the given point — no map library needed,
+// just Mapbox's Static Images API. Returns null if no token is configured.
+export function staticMapUrl(lat, lng, { width = 343, height = 140, zoom = 14 } = {}) {
+  if (!token) return null
+  const pin = `pin-s+2a9d5f(${lng},${lat})`
+  return `https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/${pin}/${lng},${lat},${zoom}/${width}x${height}@2x?access_token=${token}`
+}
