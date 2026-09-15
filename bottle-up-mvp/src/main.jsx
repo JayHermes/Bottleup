@@ -49,6 +49,59 @@ function useAuth() {
   return { session, profile, refreshProfile, loading: session === undefined, recovering, clearRecovering: () => setRecovering(false) }
 }
 
+function useNotifications(userId) {
+  const [notifications, setNotifications] = useState([])
+
+  const reload = () => {
+    if (!supabase || !userId) return
+    supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(30)
+      .then(({ data }) => setNotifications(data || []))
+  }
+
+  useEffect(() => {
+    reload()
+    if (!supabase || !userId) return
+    const channel = supabase
+      .channel(`notifications-${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, reload)
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [userId])
+
+  const markRead = id => supabase.from('notifications').update({ read: true }).eq('id', id).then(reload)
+  const markAllRead = () => { const ids = notifications.filter(n => !n.read).map(n => n.id); if (ids.length) supabase.from('notifications').update({ read: true }).in('id', ids).then(reload) }
+
+  return { notifications, unreadCount: notifications.filter(n => !n.read).length, markRead, markAllRead }
+}
+
+function useRedemptions(userId) {
+  const [redemptions, setRedemptions] = useState([])
+  const reload = () => {
+    if (!supabase || !userId) return
+    supabase.from('reward_redemptions').select('*').eq('user_id', userId).order('created_at', { ascending: false })
+      .then(({ data }) => setRedemptions(data || []))
+  }
+  useEffect(() => {
+    reload()
+    if (!supabase || !userId) return
+    const channel = supabase
+      .channel(`redemptions-${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reward_redemptions', filter: `user_id=eq.${userId}` }, reload)
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [userId])
+  return { redemptions, reload }
+}
+
+// Straight-line distance in km — good enough to sort "nearest first" without a maps API/key.
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
 function usePickupRequests(userId) {
   const [requests, setRequests] = useState(null) // null = still loading
   const [requestsError, setRequestsError] = useState('')
@@ -308,10 +361,10 @@ function StageTracker({ status }) {
 
 function Stat({ icon: Icon, value, label }) { return <div className="miniStat"><div className="miniIcon"><Icon size={16} /></div><strong>{value}</strong><span>{label}</span></div> }
 
-function RequestCard({ request, action, compact = false }) {
+function RequestCard({ request, action, compact = false, distanceKm }) {
   const weight = request.actual_weight_kg || request.estimated_weight_kg
   const earnedPoints = request.status === 'VERIFIED' ? Math.round((request.actual_weight_kg || 0) * POINTS_PER_KG) : 0
-  return <article className={`requestCard ${compact ? 'compact' : ''}`}><div className="requestTop"><div className="requestIcon"><Package size={18} /></div><div className="requestMain"><div className="requestTitle">{request.material_type}</div><div className="requestMeta"><span>{request.id.slice(0, 8)}</span><span><MapPin size={12} />{request.pickup_location}</span><span><Weight size={12} />{weight} kg</span></div></div><span className={`status ${request.status.toLowerCase()}`}>{STATUS_LABEL[request.status]}</span></div><StageTracker status={request.status} />{(earnedPoints > 0 || action) && <div className="requestBottom">{earnedPoints > 0 ? <span className="points"><Coins size={14} />+{earnedPoints} points</span> : <span />}{action}</div>}</article>
+  return <article className={`requestCard ${compact ? 'compact' : ''}`}><div className="requestTop"><div className="requestIcon"><Package size={18} /></div><div className="requestMain"><div className="requestTitle">{request.material_type}</div><div className="requestMeta"><span>{request.id.slice(0, 8)}</span><span><MapPin size={12} />{request.pickup_location}</span><span><Weight size={12} />{weight} kg</span>{distanceKm != null && <span className="distanceBadge">{distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` : `${distanceKm.toFixed(1)} km`} away</span>}</div></div><span className={`status ${request.status.toLowerCase()}`}>{STATUS_LABEL[request.status]}</span></div><StageTracker status={request.status} />{(earnedPoints > 0 || action) && <div className="requestBottom">{earnedPoints > 0 ? <span className="points"><Coins size={14} />+{earnedPoints} points</span> : <span />}{action}</div>}</article>
 }
 
 function EmptyState({ icon: Icon = Package, title, body }) { return <div className="emptyState"><div className="emptyIcon"><Icon size={22} /></div><strong>{title}</strong><p>{body}</p></div> }
@@ -415,12 +468,16 @@ function PickupsScreen({ requests, userId }) {
   return <><PageTitle eyebrow="YOUR ACTIVITY" title="Pickups" body="Track every collection from request to verified weight." />{mine.length ? <div className="requestList">{mine.map(r => <RequestCard key={r.id} request={r} />)}</div> : <EmptyState title="No pickups yet" body="Schedule your first collection from Home." />}<section className="history"><div className="sectionHead"><div><span className="eyebrow">HISTORY</span><h2>Verified collections</h2></div></div>{mine.filter(r => r.status === 'VERIFIED').map(r => <div className="historyRow" key={`h-${r.id}`}><div><strong>{new Date(r.verified_at || r.created_at).toLocaleDateString()}</strong><span>{r.actual_weight_kg} kg · {r.material_type}</span></div><span className="verified"><Check size={13} /> Verified</span></div>)}</section></>
 }
 
-function RewardsScreen({ points, redeem }) {
-  return <><PageTitle eyebrow="YOUR REWARDS" title="Rewards" body="Turn your verified recycling into something useful." /><div className="rewardHero"><div className="rewardBalance"><Coins size={28} /><div><strong>{points.toLocaleString()}</strong><span>available points</span></div></div><span>100 points = 1 kg verified plastic</span></div><div className="sectionHead"><div><span className="eyebrow">MARKETPLACE</span><h2>Redeem your points</h2></div></div><div className="rewardGrid">{REWARDS.map(r => <div className="rewardCard" key={r.name}><div className="rewardIcon"><Gift size={20} /></div><div><strong>{r.name}</strong><p>{r.note}</p></div><div className="rewardCost"><span>{r.cost.toLocaleString()} pts</span><button className="secondary" disabled={points < r.cost} onClick={() => redeem(r)}>Redeem</button></div></div>)}</div><div className="pilotNote"><ShieldCheck size={17} /><div><strong>Pilot rewards</strong><span>Reward fulfilment will be enabled as BottleUp activates each partner. Your points remain attached to your account.</span></div></div></>
+function RewardsScreen({ points, redeem, redemptions }) {
+  const pending = redemptions.filter(r => r.status === 'pending')
+  return <><PageTitle eyebrow="YOUR REWARDS" title="Rewards" body="Turn your verified recycling into something useful." /><div className="rewardHero"><div className="rewardBalance"><Coins size={28} /><div><strong>{points.toLocaleString()}</strong><span>available points</span></div></div><span>100 points = 1 kg verified plastic</span></div><div className="sectionHead"><div><span className="eyebrow">MARKETPLACE</span><h2>Redeem your points</h2></div></div><div className="rewardGrid">{REWARDS.map(r => <div className="rewardCard" key={r.name}><div className="rewardIcon"><Gift size={20} /></div><div><strong>{r.name}</strong><p>{r.note}</p></div><div className="rewardCost"><span>{r.cost.toLocaleString()} pts</span><button className="secondary" disabled={points < r.cost} onClick={() => redeem(r)}>Redeem</button></div></div>)}</div>
+    {redemptions.length > 0 && <><div className="sectionHead"><div><span className="eyebrow">HISTORY</span><h2>Your redemptions</h2></div></div><div className="requestList">{redemptions.map(r => <div className="historyRow" key={r.id}><div><strong>{r.reward_name}</strong><span>{r.cost} pts · {new Date(r.created_at).toLocaleDateString()}</span></div><span className={`status ${r.status}`}>{r.status === 'pending' ? 'Pending' : r.status === 'fulfilled' ? 'Fulfilled' : 'Declined — refunded'}</span></div>)}</div></>}
+    <div className="pilotNote"><ShieldCheck size={17} /><div><strong>Pilot rewards</strong><span>{pending.length > 0 ? `You have ${pending.length} redemption${pending.length > 1 ? 's' : ''} awaiting fulfilment.` : 'Reward fulfilment is handled by the BottleUp team as each partner activates. Your points remain attached to your account.'}</span></div></div></>
 }
 
-function WalletScreen({ points }) {
-  return <><PageTitle eyebrow="BOTTLEUP WALLET" title="Wallet" body="Keep track of what you've earned and what is pending." /><div className="walletGrid"><div className="walletMain"><span>Available reward value</span><strong>₦{Math.floor(points / 500) * 1000 .toLocaleString()}</strong><small>based on redeemable rewards currently shown</small></div><div className="walletStat"><span>Total earned</span><strong>{points.toLocaleString()} pts</strong></div><div className="walletStat"><span>Pending rewards</span><strong>0</strong></div></div><div className="pilotNote"><WalletCards size={17} /><div><strong>Redemption, not cash withdrawal</strong><span>The MVP treats BottleUp Wallet as a reward balance. Cash-out infrastructure is intentionally not part of this pilot.</span></div></div></>
+function WalletScreen({ points, redemptions }) {
+  const pendingCost = redemptions.filter(r => r.status === 'pending').reduce((a, r) => a + r.cost, 0)
+  return <><PageTitle eyebrow="BOTTLEUP WALLET" title="Wallet" body="Keep track of what you've earned and what is pending." /><div className="walletGrid"><div className="walletMain"><span>Available reward value</span><strong>₦{(Math.floor(points / 500) * 1000).toLocaleString()}</strong><small>based on redeemable rewards currently shown</small></div><div className="walletStat"><span>Total earned</span><strong>{points.toLocaleString()} pts</strong></div><div className="walletStat"><span>Pending rewards</span><strong>{pendingCost.toLocaleString()} pts</strong></div></div><div className="pilotNote"><WalletCards size={17} /><div><strong>Redemption, not cash withdrawal</strong><span>The MVP treats BottleUp Wallet as a reward balance. Cash-out infrastructure is intentionally not part of this pilot.</span></div></div></>
 }
 
 function ProfileScreen({ profile, email, onSaveName, notify }) {
@@ -476,7 +533,24 @@ function CollectAction({ request, onCollect }) {
 }
 
 function CollectorScreen({ requests, userId, accept, startOnTheWay, collect }) {
+  const [myPos, setMyPos] = useState(null)
+  useEffect(() => {
+    if (!navigator.geolocation) return
+    navigator.geolocation.getCurrentPosition(
+      pos => setMyPos({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {}, // silent — distance sorting is a nice-to-have, not required to use the screen
+      { timeout: 8000 }
+    )
+  }, [])
+
+  const withDistance = r => myPos && r.latitude != null && r.longitude != null
+    ? haversineKm(myPos.lat, myPos.lng, r.latitude, r.longitude)
+    : null
+
   const available = requests.filter(r => r.status === 'AVAILABLE')
+    .map(r => ({ r, d: withDistance(r) }))
+    .sort((a, b) => (a.d ?? Infinity) - (b.d ?? Infinity))
+    .map(x => x.r)
   const mine = requests.filter(r => r.collector_id === userId && r.status !== 'VERIFIED')
   const kg = requests.filter(r => r.collector_id === userId && r.status === 'VERIFIED').reduce((a, r) => a + (r.actual_weight_kg || 0), 0)
 
@@ -487,7 +561,7 @@ function CollectorScreen({ requests, userId, accept, startOnTheWay, collect }) {
     return null
   }
 
-  return <><PageTitle eyebrow="COLLECTOR MODE" title="Today's pickups" body="Accept nearby requests and keep every collection moving." /><section className="collectorSummary"><Stat icon={Package} value={available.length} label="Available" /><Stat icon={Truck} value={mine.length} label="My pickups" /><Stat icon={Recycle} value={`${kg.toFixed(1)} kg`} label="Verified total" /></section><section className="sectionHead"><div><span className="eyebrow">QUEUE</span><h2>Available nearby</h2></div></section>{available.length ? <div className="requestList">{available.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} />)}</div> : <EmptyState title="Nothing nearby" body="New collection requests will appear here." />}{mine.length > 0 && <><section className="sectionHead"><div><span className="eyebrow">IN PROGRESS</span><h2>My pickups</h2></div></section><div className="requestList">{mine.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} />)}</div></>}</>
+  return <><PageTitle eyebrow="COLLECTOR MODE" title="Today's pickups" body={myPos ? "Sorted by distance from your current location." : "Accept nearby requests and keep every collection moving."} /><section className="collectorSummary"><Stat icon={Package} value={available.length} label="Available" /><Stat icon={Truck} value={mine.length} label="My pickups" /><Stat icon={Recycle} value={`${kg.toFixed(1)} kg`} label="Verified total" /></section><section className="sectionHead"><div><span className="eyebrow">QUEUE</span><h2>Available nearby</h2></div></section>{available.length ? <div className="requestList">{available.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} distanceKm={withDistance(r)} />)}</div> : <EmptyState title="Nothing nearby" body="New collection requests will appear here." />}{mine.length > 0 && <><section className="sectionHead"><div><span className="eyebrow">IN PROGRESS</span><h2>My pickups</h2></div></section><div className="requestList">{mine.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} />)}</div></>}</>
 }
 
 function AdminScreen({ requests, verify }) {
@@ -499,11 +573,25 @@ function AdminScreen({ requests, verify }) {
   const [applications, setApplications] = useState(null) // null = loading
   const [appError, setAppError] = useState('')
   const [userCount, setUserCount] = useState(null)
+  const [redemptionQueue, setRedemptionQueue] = useState(null)
+  const [redemptionError, setRedemptionError] = useState('')
 
   useEffect(() => {
     if (!supabase) return
     supabase.from('profiles').select('id', { count: 'exact', head: true }).then(({ count }) => setUserCount(count))
   }, [])
+
+  const loadRedemptions = () => {
+    if (!supabase) return
+    supabase.from('reward_redemptions').select('id, reward_name, cost, created_at, profiles!user_id(full_name)').eq('status', 'pending').order('created_at', { ascending: true })
+      .then(({ data, error }) => { if (error) setRedemptionError(error.message); else { setRedemptionQueue(data); setRedemptionError('') } })
+  }
+  useEffect(loadRedemptions, [])
+  const decideRedemption = async (id, status) => {
+    const { error } = await supabase.from('reward_redemptions').update({ status }).eq('id', id)
+    if (error) setRedemptionError(error.message)
+    else loadRedemptions()
+  }
 
   const loadApplications = () => {
     if (!supabase) return
@@ -544,6 +632,23 @@ function AdminScreen({ requests, verify }) {
       ))}</div>
     ) : <EmptyState icon={UserRound} title="No pending applications" body="New collector requests from signup will appear here." />}
 
+    <section className="sectionHead"><div><span className="eyebrow">ACTION REQUIRED</span><h2>Redemption requests</h2></div>{redemptionQueue && <span className="queueCount">{redemptionQueue.length} waiting</span>}</section>
+    {redemptionError && <div className="authMessage authError" style={{ marginBottom: 12 }}>{redemptionError}</div>}
+    {redemptionQueue === null ? null : redemptionQueue.length ? (
+      <div className="requestList">{redemptionQueue.map(r => (
+        <article className="requestCard" key={r.id}>
+          <div className="requestTop">
+            <div className="requestIcon"><Gift size={18} /></div>
+            <div className="requestMain">
+              <div className="requestTitle">{r.reward_name}</div>
+              <div className="requestMeta"><span>{r.profiles?.full_name || 'Unnamed user'}</span><span>{r.cost} pts</span><span>{new Date(r.created_at).toLocaleDateString()}</span></div>
+            </div>
+          </div>
+          <div className="requestBottom"><span /><div style={{ display: 'flex', gap: 8 }}><button className="secondary small" onClick={() => decideRedemption(r.id, 'rejected')}>Decline & refund</button><button className="primary small" onClick={() => decideRedemption(r.id, 'fulfilled')}>Mark fulfilled</button></div></div>
+        </article>
+      ))}</div>
+    ) : <EmptyState icon={Gift} title="No pending redemptions" body="Requests to redeem points for rewards will appear here." />}
+
     <section className="sectionHead"><div><span className="eyebrow">ACTION REQUIRED</span><h2>Verification queue</h2></div><span className="queueCount">{collected.length} waiting</span></section>{collected.length ? <div className="requestList">{collected.map(r => <RequestCard key={r.id} request={r} action={<button className="primary small" onClick={() => verify(r.id)}>Verify + reward</button>} />)}</div> : <EmptyState icon={ShieldCheck} title="Queue is clear" body="Collected pickups will appear here for verification." />}<section className="sectionHead activityHead"><div><span className="eyebrow">RECENT</span><h2>All activity</h2></div></section><div className="requestList">{requests.map(r => <RequestCard key={r.id} request={r} compact />)}</div></>
 }
 
@@ -556,6 +661,9 @@ function AppShell({ onExit, profile, email, userId, onSaveName }) {
   const [screen, setScreen] = useState('home')
   const [notice, setNotice] = useState('')
   const { requests, loadingRequests, requestsError, reload } = usePickupRequests(userId)
+  const { notifications, unreadCount, markRead, markAllRead } = useNotifications(userId)
+  const { redemptions, reload: reloadRedemptions } = useRedemptions(userId)
+  const [notifOpen, setNotifOpen] = useState(false)
 
   const points = profile?.points || 0
 
@@ -578,12 +686,17 @@ function AppShell({ onExit, profile, email, userId, onSaveName }) {
   const startOnTheWay = async id => { const { error } = await supabase.from('pickup_requests').update({ status: 'ON_THE_WAY' }).eq('id', id); setNotice(error ? error.message : 'Marked as on the way.'); reload() }
   const collect = async (id, weight) => { const { error } = await supabase.from('pickup_requests').update({ status: 'COLLECTED', actual_weight_kg: Number(weight) }).eq('id', id); setNotice(error ? error.message : 'Collection marked as collected.'); reload() }
   const verify = async id => { const { error } = await supabase.from('pickup_requests').update({ status: 'VERIFIED' }).eq('id', id); setNotice(error ? error.message : 'Weight verified and points issued.'); reload() }
-  const redeem = reward => { if (points >= reward.cost) setNotice(`${reward.name} redemption request received.`) }
+  const redeem = async reward => {
+    const { error } = await supabase.rpc('redeem_reward', { p_reward_name: reward.name, p_cost: reward.cost })
+    // profile.points updates on its own via the live subscription in useAuth — no manual refresh needed
+    if (error) setNotice(error.message)
+    else { setNotice(`${reward.name} redemption request received.`); reloadRedemptions() }
+  }
   const nav = [{ id: 'home', label: 'Home', icon: Home }, { id: 'pickups', label: 'Pickups', icon: Package }, { id: 'rewards', label: 'Rewards', icon: Gift }, { id: 'wallet', label: 'Wallet', icon: WalletCards }, { id: 'profile', label: 'Profile', icon: UserRound }]
 
-  const content = loadingRequests ? null : role === 'collector' ? <CollectorScreen {...{ requests, userId, accept, startOnTheWay, collect }} /> : role === 'admin' ? <AdminScreen {...{ requests, verify }} /> : screen === 'home' ? <UserHome {...{ requests, setScreen, onSubmitPickup: submitPickup, profile, userId }} /> : screen === 'pickups' ? <PickupsScreen requests={requests} userId={userId} /> : screen === 'rewards' ? <RewardsScreen points={points} redeem={redeem} /> : screen === 'wallet' ? <WalletScreen points={points} /> : <ProfileScreen profile={profile} email={email} onSaveName={onSaveName} notify={setNotice} />
+  const content = loadingRequests ? null : role === 'collector' ? <CollectorScreen {...{ requests, userId, accept, startOnTheWay, collect }} /> : role === 'admin' ? <AdminScreen {...{ requests, verify }} /> : screen === 'home' ? <UserHome {...{ requests, setScreen, onSubmitPickup: submitPickup, profile, userId }} /> : screen === 'pickups' ? <PickupsScreen requests={requests} userId={userId} /> : screen === 'rewards' ? <RewardsScreen points={points} redeem={redeem} redemptions={redemptions} /> : screen === 'wallet' ? <WalletScreen points={points} redemptions={redemptions} /> : <ProfileScreen profile={profile} email={email} onSaveName={onSaveName} notify={setNotice} />
 
-  return <div className="app"><header className="topbar"><div className="topInner"><button className="brand brandButton" onClick={() => { setPreviewRole(null); setScreen('home') }}><Logo /><span>Bottle<span>Up</span></span></button><div className="topActions"><button className="iconButton" title="Notifications"><Bell size={18} /></button><Avatar name={profile?.full_name} email={email} size="sm" /></div></div></header><div className="appBody"><aside className="sidebar"><div className="rolePill"><span>{canPreview && previewRole ? 'PREVIEWING' : 'ACCOUNT'}</span><strong>{role === 'user' ? 'User' : role === 'collector' ? 'Collector' : 'Admin'}</strong></div>{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'navItem active' : 'navItem'} onClick={() => setScreen(id)}><Icon size={18} />{label}</button>)}<div className="sideBottom">{canPreview && <button className="navItem" onClick={() => setPreviewRole(role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user')}><Users size={18} />Preview as {role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user'}</button>}<button className="navItem" onClick={onExit}><ArrowRight size={18} />Sign out</button></div></aside><main className="main">{notice && <button className="notice" onClick={() => setNotice('')}><Check size={15} />{notice}<X size={14} /></button>}{requestsError && <div className="authMessage authError" style={{ marginBottom: 14 }}>{requestsError}</div>}{content}</main></div><nav className="mobileNav">{role === 'user' ? nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'active' : ''} onClick={() => setScreen(id)}><Icon size={18} /><span>{label}</span></button>) : <>{canPreview && <button onClick={() => setPreviewRole(role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user')}><Users size={18} /><span>Preview</span></button>}<button onClick={onExit}><ArrowRight size={18} /><span>Sign out</span></button></>}</nav></div>
+  return <>{notifOpen && <div className="notifBackdrop" onClick={() => setNotifOpen(false)} />}<div className="app"><header className="topbar"><div className="topInner"><button className="brand brandButton" onClick={() => { setPreviewRole(null); setScreen('home') }}><Logo /><span>Bottle<span>Up</span></span></button><div className="topActions"><div className="notifWrap"><button className="iconButton" title="Notifications" onClick={() => setNotifOpen(o => !o)}><Bell size={18} />{unreadCount > 0 && <span className="notifDot">{unreadCount > 9 ? '9+' : unreadCount}</span>}</button>{notifOpen && <div className="notifPanel"><div className="notifHead"><strong>Notifications</strong>{unreadCount > 0 && <button onClick={markAllRead}>Mark all read</button>}</div>{notifications.length ? notifications.map(n => <button key={n.id} className={`notifRow ${n.read ? '' : 'unread'}`} onClick={() => markRead(n.id)}><span>{n.message}</span><small>{new Date(n.created_at).toLocaleDateString()}</small></button>) : <div className="notifEmpty">Nothing yet — updates on your pickups will show up here.</div>}</div>}</div><Avatar name={profile?.full_name} email={email} size="sm" /></div></div></header><div className="appBody"><aside className="sidebar"><div className="rolePill"><span>{canPreview && previewRole ? 'PREVIEWING' : 'ACCOUNT'}</span><strong>{role === 'user' ? 'User' : role === 'collector' ? 'Collector' : 'Admin'}</strong></div>{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'navItem active' : 'navItem'} onClick={() => setScreen(id)}><Icon size={18} />{label}</button>)}<div className="sideBottom">{canPreview && <button className="navItem" onClick={() => setPreviewRole(role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user')}><Users size={18} />Preview as {role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user'}</button>}<button className="navItem" onClick={onExit}><ArrowRight size={18} />Sign out</button></div></aside><main className="main">{notice && <button className="notice" onClick={() => setNotice('')}><Check size={15} />{notice}<X size={14} /></button>}{requestsError && <div className="authMessage authError" style={{ marginBottom: 14 }}>{requestsError}</div>}{content}</main></div><nav className="mobileNav">{role === 'user' ? nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'active' : ''} onClick={() => setScreen(id)}><Icon size={18} /><span>{label}</span></button>) : <>{canPreview && <button onClick={() => setPreviewRole(role === 'user' ? 'collector' : role === 'collector' ? 'admin' : 'user')}><Users size={18} /><span>Preview</span></button>}<button onClick={onExit}><ArrowRight size={18} /><span>Sign out</span></button></>}</nav></div></>
 }
 
 function App() {
