@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import './styles.css'
 import { supabase, supabaseConfigError } from './lib/supabase.js'
+import { geocode } from './lib/mapbox.js'
 
 function useAuth() {
   const [session, setSession] = useState(undefined) // undefined = still checking, null = signed out
@@ -405,7 +406,10 @@ function PickupModal({ onSubmit, close }) {
     if (!estimate || !location) return
     setBusy(true)
     setError('')
-    const err = await onSubmit({ type, estimate, location, photo, coords })
+    // If they didn't tap "use my location," fall back to converting what they
+    // typed into coordinates, so distance-sorting still works for this pickup.
+    const finalCoords = coords || await geocode(`${location}, Nigeria`)
+    const err = await onSubmit({ type, estimate, location, photo, coords: finalCoords })
     setBusy(false)
     if (err) setError(err.message || 'Could not submit this request. Please try again.')
     else close()
