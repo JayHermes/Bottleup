@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   ArrowRight, Bell, Camera, Check, ChevronRight, Coins, Gift, Home, Leaf,
@@ -386,6 +386,11 @@ function PickupModal({ onSubmit, close }) {
 
   const onPhoto = e => {
     const file = e.target.files?.[0] || null
+    if (file) {
+      if (!file.type.startsWith('image/')) { setLocateError(''); setError('Please choose an image file.'); e.target.value = ''; return }
+      if (file.size > 8 * 1024 * 1024) { setError('That photo is over 8MB — try a smaller one.'); e.target.value = ''; return }
+    }
+    setError('')
     setPhoto(file)
     setPreview(prev => { if (prev) URL.revokeObjectURL(prev); return file ? URL.createObjectURL(file) : null })
   }
@@ -537,6 +542,8 @@ function CollectAction({ request, onCollect }) {
   return <div className="collectAction"><div className="inputWithIcon"><Weight size={14} /><input type="number" min="0.1" step="0.1" value={weight} onChange={e => setWeight(e.target.value)} /></div><button className="primary small" disabled={busy} onClick={go}>{busy ? 'Saving…' : 'Confirm collected'}</button></div>
 }
 
+const PickupsMap = React.lazy(() => import('./PickupsMap.jsx'))
+
 function CollectorScreen({ requests, userId, accept, startOnTheWay, collect }) {
   const [myPos, setMyPos] = useState(null)
   useEffect(() => {
@@ -566,7 +573,9 @@ function CollectorScreen({ requests, userId, accept, startOnTheWay, collect }) {
     return null
   }
 
-  return <><PageTitle eyebrow="COLLECTOR MODE" title="Today's pickups" body={myPos ? "Sorted by distance from your current location." : "Accept nearby requests and keep every collection moving."} /><section className="collectorSummary"><Stat icon={Package} value={available.length} label="Available" /><Stat icon={Truck} value={mine.length} label="My pickups" /><Stat icon={Recycle} value={`${kg.toFixed(1)} kg`} label="Verified total" /></section><section className="sectionHead"><div><span className="eyebrow">QUEUE</span><h2>Available nearby</h2></div></section>{available.length ? <div className="requestList">{available.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} distanceKm={withDistance(r)} />)}</div> : <EmptyState title="Nothing nearby" body="New collection requests will appear here." />}{mine.length > 0 && <><section className="sectionHead"><div><span className="eyebrow">IN PROGRESS</span><h2>My pickups</h2></div></section><div className="requestList">{mine.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} />)}</div></>}</>
+  return <><PageTitle eyebrow="COLLECTOR MODE" title="Today's pickups" body={myPos ? "Sorted by distance from your current location." : "Accept nearby requests and keep every collection moving."} /><section className="collectorSummary"><Stat icon={Package} value={available.length} label="Available" /><Stat icon={Truck} value={mine.length} label="My pickups" /><Stat icon={Recycle} value={`${kg.toFixed(1)} kg`} label="Verified total" /></section>
+    <React.Suspense fallback={<div className="mapShell mapLoading">Loading map…</div>}><PickupsMap points={available.filter(r => r.latitude != null && r.longitude != null)} myPos={myPos} /></React.Suspense>
+    <section className="sectionHead"><div><span className="eyebrow">QUEUE</span><h2>Available nearby</h2></div></section>{available.length ? <div className="requestList">{available.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} distanceKm={withDistance(r)} />)}</div> : <EmptyState title="Nothing nearby" body="New collection requests will appear here." />}{mine.length > 0 && <><section className="sectionHead"><div><span className="eyebrow">IN PROGRESS</span><h2>My pickups</h2></div></section><div className="requestList">{mine.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} />)}</div></>}</>
 }
 
 function AdminScreen({ requests, verify }) {
