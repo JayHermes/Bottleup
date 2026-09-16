@@ -202,3 +202,14 @@
    V2.1 addition — visible pin preview for captured location
    ============================================================ */
 .locateMap{width:100%;border-radius:12px;border:1px solid var(--line);display:block;margin-top:-2px}
+
+/* ============================================================
+   V2.2 additions — interactive collector map
+   ============================================================ */
+.mapShell{border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px}
+.mapCanvas{width:100%;height:260px}
+.mapDot{width:16px;height:16px;border-radius:50%;background:var(--green-bright);border:2px solid var(--ink);box-shadow:0 0 0 2px var(--green-bright)}
+.mapDotMe{background:var(--gold);box-shadow:0 0 0 2px var(--gold)}
+.mapboxgl-popup-content{background:var(--surface)!important;color:var(--cream)!important;border:1px solid var(--line);border-radius:10px!important;font-family:var(--font-body);font-size:11.5px;padding:10px 12px!important}
+.mapboxgl-popup-tip{border-top-color:var(--surface)!important;border-bottom-color:var(--surface)!important}
+.mapLoading{height:260px;display:grid;place-items:center;color:var(--muted);font-size:12px;background:var(--surface)}
