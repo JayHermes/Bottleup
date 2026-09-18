@@ -1,13 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
-  ArrowRight, Bell, Camera, Check, ChevronRight, Coins, Gift, Home, Leaf,
+  ArrowRight, Bell, Camera, Check, ChevronRight, Coins, Eye, EyeOff, Gift, Home, Leaf,
   MapPin, Package, Pencil, Recycle, ShieldCheck, Truck, UserRound, Users,
   WalletCards, Weight, X
 } from 'lucide-react'
 import './styles.css'
 import { supabase, supabaseConfigError } from './lib/supabase.js'
 import { geocode, staticMapUrl } from './lib/mapbox.js'
+
+function PasswordField({ label, value, onChange, placeholder }) {
+  const [visible, setVisible] = useState(false)
+  return <label className="authLabel">{label}<div className="passwordField"><input className="authInput" type={visible ? 'text' : 'password'} required minLength={6} value={value} onChange={onChange} placeholder={placeholder} /><button type="button" className="passwordToggle" onClick={() => setVisible(v => !v)} tabIndex={-1} aria-label={visible ? 'Hide password' : 'Show password'}>{visible ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
+}
 
 function useAuth() {
   const [session, setSession] = useState(undefined) // undefined = still checking, null = signed out
@@ -242,8 +247,8 @@ function ResetPasswordScreen({ onDone }) {
       <h1 className="authTitle">Set a new password</h1>
       <p className="authCopy">You're verified via the reset link — choose a new password for your account.</p>
       <form className="authForm" onSubmit={submit}>
-        <label className="authLabel">New password<input className="authInput" type="password" required minLength={6} value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters" /></label>
-        <label className="authLabel">Confirm password<input className="authInput" type="password" required minLength={6} value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Type it again" /></label>
+        <PasswordField label="New password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters" />
+        <PasswordField label="Confirm password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Type it again" />
         <button className="authButton" disabled={busy} type="submit">{busy ? 'Saving…' : 'Update password'}</button>
         {message && <div className={`authMessage ${error ? 'authError' : ''}`}>{message}</div>}
       </form>
@@ -344,7 +349,7 @@ function AuthPanel({ mode: initialMode, onBack }) {
         {mode === 'signup' && <label className="authLabel">Phone<input className="authInput" value={fields.phone} onChange={e => set('phone', e.target.value)} placeholder="080..." /></label>}
         {mode === 'signup' && <label className="authCheck"><input type="checkbox" checked={fields.wantsCollector} onChange={e => set('wantsCollector', e.target.checked)} /><span>I'd like to apply to become a collector <em>(reviewed by BottleUp before it takes effect)</em></span></label>}
         <label className="authLabel">Email<input className="authInput" type="email" required value={fields.email} onChange={e => set('email', e.target.value)} placeholder="you@example.com" /></label>
-        {mode !== 'forgot' && <label className="authLabel">Password<input className="authInput" type="password" required minLength={6} value={fields.password} onChange={e => set('password', e.target.value)} placeholder="At least 6 characters" /></label>}
+        {mode !== 'forgot' && <PasswordField label="Password" value={fields.password} onChange={e => set('password', e.target.value)} placeholder="At least 6 characters" />}
         {mode === 'signin' && <button type="button" className="authForgot" onClick={() => { setMode('forgot'); setMessage('') }}>Forgot password?</button>}
         <button className="authButton" disabled={busy} type="submit">{busy ? 'Please wait…' : mode === 'forgot' ? 'Send reset link' : mode === 'signup' ? 'Create account' : 'Sign in'}</button>
         {mode === 'forgot' && <button type="button" className="authForgot" onClick={() => { setMode('signin'); setMessage('') }}>Back to sign in</button>}
@@ -475,7 +480,23 @@ function UserHome({ requests, setScreen, onSubmitPickup, profile, userId }) {
 
 function PickupsScreen({ requests, userId }) {
   const mine = requests.filter(r => r.user_id === userId)
-  return <><PageTitle eyebrow="YOUR ACTIVITY" title="Pickups" body="Track every collection from request to verified weight." />{mine.length ? <div className="requestList">{mine.map(r => <RequestCard key={r.id} request={r} />)}</div> : <EmptyState title="No pickups yet" body="Schedule your first collection from Home." />}<section className="history"><div className="sectionHead"><div><span className="eyebrow">HISTORY</span><h2>Verified collections</h2></div></div>{mine.filter(r => r.status === 'VERIFIED').map(r => <div className="historyRow" key={`h-${r.id}`}><div><strong>{new Date(r.verified_at || r.created_at).toLocaleDateString()}</strong><span>{r.actual_weight_kg} kg · {r.material_type}</span></div><span className="verified"><Check size={13} /> Verified</span></div>)}</section></>
+  const tracking = mine.find(r => ['ACCEPTED', 'ON_THE_WAY'].includes(r.status) && r.latitude != null && r.collector_latitude != null)
+  const distance = tracking ? haversineKm(tracking.latitude, tracking.longitude, tracking.collector_latitude, tracking.collector_longitude) : null
+
+  return <><PageTitle eyebrow="YOUR ACTIVITY" title="Pickups" body="Track every collection from request to verified weight." />
+    {tracking && (
+      <section className="trackingCard">
+        <div className="sectionHead"><div><span className="eyebrow">LIVE</span><h2>Your collector</h2></div>{distance != null && <span className="distanceBadge">{distance < 1 ? `${Math.round(distance * 1000)} m away` : `${distance.toFixed(1)} km away`}</span>}</div>
+        <React.Suspense fallback={<div className="mapShell mapLoading">Loading map…</div>}>
+          <PickupsMap
+            points={[{ lat: tracking.collector_latitude, lng: tracking.collector_longitude, popupHtml: 'Your collector' }]}
+            myPos={{ lat: tracking.latitude, lng: tracking.longitude }}
+            myPopupHtml="Your pickup location"
+          />
+        </React.Suspense>
+      </section>
+    )}
+    {mine.length ? <div className="requestList">{mine.map(r => <RequestCard key={r.id} request={r} />)}</div> : <EmptyState title="No pickups yet" body="Schedule your first collection from Home." />}<section className="history"><div className="sectionHead"><div><span className="eyebrow">HISTORY</span><h2>Verified collections</h2></div></div>{mine.filter(r => r.status === 'VERIFIED').map(r => <div className="historyRow" key={`h-${r.id}`}><div><strong>{new Date(r.verified_at || r.created_at).toLocaleDateString()}</strong><span>{r.actual_weight_kg} kg · {r.material_type}</span></div><span className="verified"><Check size={13} /> Verified</span></div>)}</section></>
 }
 
 function RewardsScreen({ points, redeem, redemptions }) {
@@ -595,14 +616,14 @@ function CollectorScreen({ requests, userId, accept, startOnTheWay, collect }) {
   const kg = requests.filter(r => r.collector_id === userId && r.status === 'VERIFIED').reduce((a, r) => a + (r.actual_weight_kg || 0), 0)
 
   const actionFor = r => {
-    if (r.status === 'AVAILABLE') return <button className="primary small" onClick={() => accept(r.id)}>Accept pickup</button>
-    if (r.status === 'ACCEPTED' && r.collector_id === userId) return <button className="primary small" onClick={() => startOnTheWay(r.id)}>Start heading over</button>
+    if (r.status === 'AVAILABLE') return <button className="primary small" onClick={() => accept(r.id, myPos)}>Accept pickup</button>
+    if (r.status === 'ACCEPTED' && r.collector_id === userId) return <button className="primary small" onClick={() => startOnTheWay(r.id, myPos)}>Start heading over</button>
     if (r.status === 'ON_THE_WAY' && r.collector_id === userId) return <CollectAction request={r} onCollect={collect} />
     return null
   }
 
   return <><PageTitle eyebrow="COLLECTOR MODE" title="Today's pickups" body={myPos ? "Sorted by distance from your current location." : "Accept nearby requests and keep every collection moving."} /><section className="collectorSummary"><Stat icon={Package} value={available.length} label="Available" /><Stat icon={Truck} value={mine.length} label="My pickups" /><Stat icon={Recycle} value={`${kg.toFixed(1)} kg`} label="Verified total" /></section>
-    <React.Suspense fallback={<div className="mapShell mapLoading">Loading map…</div>}><PickupsMap points={available.filter(r => r.latitude != null && r.longitude != null)} myPos={myPos} /></React.Suspense>
+    <React.Suspense fallback={<div className="mapShell mapLoading">Loading map…</div>}><PickupsMap points={available.filter(r => r.latitude != null && r.longitude != null).map(r => ({ lat: r.latitude, lng: r.longitude, popupHtml: `<strong>${r.material_type}</strong><br/>${r.pickup_location} · ${r.estimated_weight_kg} kg` }))} myPos={myPos} myPopupHtml="Your location" /></React.Suspense>
     <section className="sectionHead"><div><span className="eyebrow">QUEUE</span><h2>Available nearby</h2></div></section>{available.length ? <div className="requestList">{available.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} distanceKm={withDistance(r)} />)}</div> : <EmptyState title="Nothing nearby" body="New collection requests will appear here." />}{mine.length > 0 && <><section className="sectionHead"><div><span className="eyebrow">IN PROGRESS</span><h2>My pickups</h2></div></section><div className="requestList">{mine.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} />)}</div></>}</>
 }
 
@@ -724,8 +745,8 @@ function AppShell({ onExit, profile, email, userId, onSaveName }) {
     if (!error) { reload(); setScreen('pickups'); setNotice('Pickup request submitted.') }
     return error
   }
-  const accept = async id => { const { error } = await supabase.from('pickup_requests').update({ status: 'ACCEPTED', collector_id: userId }).eq('id', id); setNotice(error ? error.message : 'Pickup accepted.'); reload() }
-  const startOnTheWay = async id => { const { error } = await supabase.from('pickup_requests').update({ status: 'ON_THE_WAY' }).eq('id', id); setNotice(error ? error.message : 'Marked as on the way.'); reload() }
+  const accept = async (id, coords) => { const patch = { status: 'ACCEPTED', collector_id: userId, ...(coords ? { collector_latitude: coords.lat, collector_longitude: coords.lng } : {}) }; const { error } = await supabase.from('pickup_requests').update(patch).eq('id', id); setNotice(error ? error.message : 'Pickup accepted.'); reload() }
+  const startOnTheWay = async (id, coords) => { const patch = { status: 'ON_THE_WAY', ...(coords ? { collector_latitude: coords.lat, collector_longitude: coords.lng } : {}) }; const { error } = await supabase.from('pickup_requests').update(patch).eq('id', id); setNotice(error ? error.message : 'Marked as on the way.'); reload() }
   const collect = async (id, weight) => { const { error } = await supabase.from('pickup_requests').update({ status: 'COLLECTED', actual_weight_kg: Number(weight) }).eq('id', id); setNotice(error ? error.message : 'Collection marked as collected.'); reload() }
   const verify = async id => { const { error } = await supabase.from('pickup_requests').update({ status: 'VERIFIED' }).eq('id', id); setNotice(error ? error.message : 'Weight verified and points issued.'); reload() }
   const redeem = async reward => {
