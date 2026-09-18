@@ -260,7 +260,7 @@ function LegalScreen({ page, onBack }) {
     <h2>Who can see it</h2>
     <p>Collectors can see the pickups they've accepted. Admins can see pickups and applications needed to run verification and collector approval. Your authentication and data storage are handled by Supabase, our infrastructure provider.</p>
     <h2>Your choices</h2>
-    <p>Adding a photo and precise GPS location are both optional. You can edit your name from your Profile at any time, and you can request account deletion by contacting us.</p>
+    <p>Adding a photo and precise GPS location are both optional. You can edit your name from your Profile at any time. You can also permanently delete your account and your own pickup data directly from Profile — pickups you collected for other people remain on their record, with your name removed from them.</p>
     <h2>A note on where we are</h2>
     <p>BottleUp is an early-stage pilot. This policy describes what we actually do today, in plain language, rather than a full legal document — if you have concerns about how your data is handled, please reach out directly.</p>
   </>
@@ -494,6 +494,9 @@ function ProfileScreen({ profile, email, onSaveName, notify }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(profile?.full_name || '')
   const [saving, setSaving] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   const startEdit = () => { setDraft(profile?.full_name || ''); setEditing(true) }
   const save = async () => {
@@ -501,6 +504,15 @@ function ProfileScreen({ profile, email, onSaveName, notify }) {
     await onSaveName(draft.trim())
     setSaving(false)
     setEditing(false)
+  }
+
+  const deleteAccount = async () => {
+    setDeleting(true)
+    setDeleteError('')
+    const { error } = await supabase.rpc('delete_own_account')
+    if (error) { setDeleteError(error.message); setDeleting(false); return }
+    // Account is gone — the session is no longer valid, sign out client-side to land back on the landing page.
+    supabase.auth.signOut()
   }
 
   const placeholderRows = [
@@ -527,6 +539,22 @@ function ProfileScreen({ profile, email, onSaveName, notify }) {
       {placeholderRows.map(([Icon, label]) => <div key={label} onClick={() => notify(`${label} is coming soon.`)}><div><Icon size={17} /><span>{label}</span></div><ChevronRight size={17} /></div>)}
     </div>
     <button className="secondary" style={{ marginTop: 18 }} onClick={() => supabase.auth.signOut()}>Sign out</button>
+
+    <div className="dangerZone">
+      {!confirmingDelete ? (
+        <button className="dangerLink" onClick={() => setConfirmingDelete(true)}>Delete my account</button>
+      ) : (
+        <div className="dangerConfirm">
+          <strong>This permanently deletes your account.</strong>
+          <p>Your profile and your own pickup requests will be removed. Pickups you collected for other people stay on their record, just without your name attached. This can't be undone.</p>
+          {deleteError && <div className="authMessage authError">{deleteError}</div>}
+          <div className="profileEditActions">
+            <button className="dangerButton" disabled={deleting} onClick={deleteAccount}>{deleting ? 'Deleting…' : 'Yes, permanently delete'}</button>
+            <button className="secondary small" onClick={() => { setConfirmingDelete(false); setDeleteError('') }}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
   </>
 }
 
