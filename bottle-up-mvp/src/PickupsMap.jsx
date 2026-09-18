@@ -1,11 +1,15 @@
 // Split into its own file deliberately: mapbox-gl is a large WebGL library
 // (~2MB). Loading it here means it's only fetched by people who actually
-// open the collector map, not bundled into everyone's initial page load.
+// open a map, not bundled into everyone's initial page load.
 import { useEffect, useRef } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 
-export default function PickupsMap({ points, myPos }) {
+// points: [{ lat, lng, popupHtml }] — rendered as green dots.
+// myPos: { lat, lng } — rendered as a gold dot, meaning "you" from the
+// viewer's perspective (a collector's own GPS position, or a user's stored
+// pickup location, depending on who's looking at the map).
+export default function PickupsMap({ points, myPos, myPopupHtml }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
   const markersRef = useRef([])
@@ -17,8 +21,8 @@ export default function PickupsMap({ points, myPos }) {
     mapRef.current = new mapboxgl.Map({
       container: containerRef.current,
       style: 'mapbox://styles/mapbox/dark-v11',
-      center: myPos ? [myPos.lng, myPos.lat] : [3.379, 6.524], // falls back to Lagos if we don't have a position yet
-      zoom: 11,
+      center: myPos ? [myPos.lng, myPos.lat] : points[0] ? [points[0].lng, points[0].lat] : [3.379, 6.524],
+      zoom: 12,
     })
     mapRef.current.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right')
     return () => { mapRef.current?.remove(); mapRef.current = null }
@@ -32,15 +36,17 @@ export default function PickupsMap({ points, myPos }) {
 
     if (myPos) {
       const el = document.createElement('div'); el.className = 'mapDot mapDotMe'
-      markersRef.current.push(new mapboxgl.Marker({ element: el }).setLngLat([myPos.lng, myPos.lat]).addTo(map))
+      const marker = new mapboxgl.Marker({ element: el }).setLngLat([myPos.lng, myPos.lat])
+      if (myPopupHtml) marker.setPopup(new mapboxgl.Popup({ offset: 16, closeButton: false }).setHTML(myPopupHtml))
+      markersRef.current.push(marker.addTo(map))
     }
     points.forEach(p => {
       const el = document.createElement('div'); el.className = 'mapDot'
-      const popup = new mapboxgl.Popup({ offset: 16, closeButton: false }).setHTML(`<strong>${p.material_type}</strong><br/>${p.pickup_location} · ${p.estimated_weight_kg} kg`)
-      markersRef.current.push(new mapboxgl.Marker({ element: el }).setLngLat([p.longitude, p.latitude]).setPopup(popup).addTo(map))
+      const popup = new mapboxgl.Popup({ offset: 16, closeButton: false }).setHTML(p.popupHtml || '')
+      markersRef.current.push(new mapboxgl.Marker({ element: el }).setLngLat([p.lng, p.lat]).setPopup(popup).addTo(map))
     })
 
-    const coordsToFit = [...(myPos ? [[myPos.lng, myPos.lat]] : []), ...points.map(p => [p.longitude, p.latitude])]
+    const coordsToFit = [...(myPos ? [[myPos.lng, myPos.lat]] : []), ...points.map(p => [p.lng, p.lat])]
     if (coordsToFit.length > 1) {
       const bounds = coordsToFit.reduce((b, c) => b.extend(c), new mapboxgl.LngLatBounds(coordsToFit[0], coordsToFit[0]))
       map.fitBounds(bounds, { padding: 50, maxZoom: 14, duration: 0 })
