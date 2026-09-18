@@ -213,3 +213,12 @@
 .mapboxgl-popup-content{background:var(--surface)!important;color:var(--cream)!important;border:1px solid var(--line);border-radius:10px!important;font-family:var(--font-body);font-size:11.5px;padding:10px 12px!important}
 .mapboxgl-popup-tip{border-top-color:var(--surface)!important;border-bottom-color:var(--surface)!important}
 .mapLoading{height:260px;display:grid;place-items:center;color:var(--muted);font-size:12px;background:var(--surface)}
+
+/* ============================================================
+   V2.3 addition — explicit admin preview switch (was a blind cycle)
+   ============================================================ */
+.previewSwitch{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.previewLabel{font-size:9.5px;font-weight:800;letter-spacing:.05em;color:var(--muted-2)}
+.previewOptions{display:flex;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px}
+.previewOptions button{flex:1;border:0;background:transparent;color:var(--muted);padding:7px 4px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer}
+.previewOptions button.active{background:var(--green);color:#fff}
