@@ -11,7 +11,7 @@ import { geocode, staticMapUrl } from './lib/mapbox.js'
 
 function PasswordField({ label, value, onChange, placeholder }) {
   const [visible, setVisible] = useState(false)
-  return <label className="authLabel">{label}<div className="passwordField"><input className="authInput" type={visible ? 'text' : 'password'} required minLength={6} value={value} onChange={onChange} placeholder={placeholder} /><button type="button" className="passwordToggle" onClick={() => setVisible(v => !v)} tabIndex={-1} aria-label={visible ? 'Hide password' : 'Show password'}>{visible ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
+  return <label className="authLabel">{label}<div className="passwordField"><input className="authInput" type={visible ? 'text' : 'password'} required minLength={8} value={value} onChange={onChange} placeholder={placeholder} /><button type="button" className="passwordToggle" onClick={() => setVisible(v => !v)} tabIndex={-1} aria-label={visible ? 'Hide password' : 'Show password'}>{visible ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
 }
 
 function useAuth() {
@@ -106,6 +106,28 @@ function haversineKm(lat1, lng1, lat2, lng2) {
   const dLng = (lng2 - lng1) * Math.PI / 180
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+// Re-encode images through a canvas before upload: strips EXIF metadata (which
+// can embed precise GPS and device info) and downscales to a sane size.
+async function normalizeImage(file) {
+  if (!file || !file.type.startsWith('image/')) return file
+  try {
+    const bitmap = await createImageBitmap(file)
+    const max = 1600
+    const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    bitmap.close()
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.82))
+    if (!blob) return file
+    return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' })
+  } catch {
+    return file
+  }
 }
 
 function usePickupRequests(userId) {
@@ -247,7 +269,7 @@ function ResetPasswordScreen({ onDone }) {
       <h1 className="authTitle">Set a new password</h1>
       <p className="authCopy">You're verified via the reset link — choose a new password for your account.</p>
       <form className="authForm" onSubmit={submit}>
-        <PasswordField label="New password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters" />
+        <PasswordField label="New password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 8 characters" />
         <PasswordField label="Confirm password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Type it again" />
         <button className="authButton" disabled={busy} type="submit">{busy ? 'Saving…' : 'Update password'}</button>
         {message && <div className={`authMessage ${error ? 'authError' : ''}`}>{message}</div>}
@@ -303,6 +325,9 @@ function AuthPanel({ mode: initialMode, onBack }) {
     setMessage('')
     setError(false)
     try {
+      if (mode !== 'forgot' && fields.password.length < 8) {
+        setMessage('Password must be at least 8 characters.'); setError(true); return
+      }
       if (mode === 'forgot') {
         const { error } = await supabase.auth.resetPasswordForEmail(fields.email, { redirectTo: window.location.origin })
         if (error) { setMessage(error.message); setError(true) }
@@ -349,7 +374,7 @@ function AuthPanel({ mode: initialMode, onBack }) {
         {mode === 'signup' && <label className="authLabel">Phone<input className="authInput" value={fields.phone} onChange={e => set('phone', e.target.value)} placeholder="080..." /></label>}
         {mode === 'signup' && <label className="authCheck"><input type="checkbox" checked={fields.wantsCollector} onChange={e => set('wantsCollector', e.target.checked)} /><span>I'd like to apply to become a collector <em>(reviewed by BottleUp before it takes effect)</em></span></label>}
         <label className="authLabel">Email<input className="authInput" type="email" required value={fields.email} onChange={e => set('email', e.target.value)} placeholder="you@example.com" /></label>
-        {mode !== 'forgot' && <PasswordField label="Password" value={fields.password} onChange={e => set('password', e.target.value)} placeholder="At least 6 characters" />}
+        {mode !== 'forgot' && <PasswordField label="Password" value={fields.password} onChange={e => set('password', e.target.value)} placeholder="At least 8 characters" />}
         {mode === 'signin' && <button type="button" className="authForgot" onClick={() => { setMode('forgot'); setMessage('') }}>Forgot password?</button>}
         <button className="authButton" disabled={busy} type="submit">{busy ? 'Please wait…' : mode === 'forgot' ? 'Send reset link' : mode === 'signup' ? 'Create account' : 'Sign in'}</button>
         {mode === 'forgot' && <button type="button" className="authForgot" onClick={() => { setMode('signin'); setMessage('') }}>Back to sign in</button>}
@@ -651,7 +676,7 @@ function AdminScreen({ requests, verify }) {
   }
   useEffect(loadRedemptions, [])
   const decideRedemption = async (id, status) => {
-    const { error } = await supabase.from('reward_redemptions').update({ status }).eq('id', id)
+    const { error } = await supabase.rpc('decide_redemption', { p_id: id, p_status: status })
     if (error) setRedemptionError(error.message)
     else loadRedemptions()
   }
@@ -671,7 +696,7 @@ function AdminScreen({ requests, verify }) {
   useEffect(loadApplications, [])
 
   const decide = async (id, status) => {
-    const { error } = await supabase.from('collector_applications').update({ status }).eq('id', id)
+    const { error } = await supabase.rpc('decide_collector_application', { p_id: id, p_status: status })
     if (error) setAppError(error.message)
     else loadApplications()
   }
@@ -733,10 +758,13 @@ function AppShell({ onExit, profile, email, userId, onSaveName }) {
   const submitPickup = async ({ type, estimate, location, photo, coords }) => {
     let photo_url = null
     if (photo) {
-      const path = `${userId}/${Date.now()}-${photo.name}`
-      const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, photo)
+      // Private bucket + RLS-scoped path (`<user_id>/<file>`). The stored value
+      // is the object path, not a public URL.
+      const safePhoto = await normalizeImage(photo)
+      const path = `${userId}/${Date.now()}-${safePhoto.name}`
+      const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, safePhoto)
       if (upErr) return upErr
-      photo_url = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl
+      photo_url = path
     }
     const { error } = await supabase.from('pickup_requests').insert({
       user_id: userId, material_type: type, estimated_weight_kg: Number(estimate), pickup_location: location, photo_url,
@@ -745,10 +773,10 @@ function AppShell({ onExit, profile, email, userId, onSaveName }) {
     if (!error) { reload(); setScreen('pickups'); setNotice('Pickup request submitted.') }
     return error
   }
-  const accept = async (id, coords) => { const patch = { status: 'ACCEPTED', collector_id: userId, ...(coords ? { collector_latitude: coords.lat, collector_longitude: coords.lng } : {}) }; const { error } = await supabase.from('pickup_requests').update(patch).eq('id', id); setNotice(error ? error.message : 'Pickup accepted.'); reload() }
-  const startOnTheWay = async (id, coords) => { const patch = { status: 'ON_THE_WAY', ...(coords ? { collector_latitude: coords.lat, collector_longitude: coords.lng } : {}) }; const { error } = await supabase.from('pickup_requests').update(patch).eq('id', id); setNotice(error ? error.message : 'Marked as on the way.'); reload() }
-  const collect = async (id, weight) => { const { error } = await supabase.from('pickup_requests').update({ status: 'COLLECTED', actual_weight_kg: Number(weight) }).eq('id', id); setNotice(error ? error.message : 'Collection marked as collected.'); reload() }
-  const verify = async id => { const { error } = await supabase.from('pickup_requests').update({ status: 'VERIFIED' }).eq('id', id); setNotice(error ? error.message : 'Weight verified and points issued.'); reload() }
+  const accept = async (id, coords) => { const { error } = await supabase.rpc('accept_pickup', { p_id: id, p_lat: coords?.lat ?? null, p_lng: coords?.lng ?? null }); setNotice(error ? error.message : 'Pickup accepted.'); reload() }
+  const startOnTheWay = async (id, coords) => { const { error } = await supabase.rpc('start_on_the_way', { p_id: id, p_lat: coords?.lat ?? null, p_lng: coords?.lng ?? null }); setNotice(error ? error.message : 'Marked as on the way.'); reload() }
+  const collect = async (id, weight) => { const { error } = await supabase.rpc('collect_pickup', { p_id: id, p_weight: Number(weight) }); setNotice(error ? error.message : 'Collection marked as collected.'); reload() }
+  const verify = async id => { const { error } = await supabase.rpc('verify_pickup', { p_id: id }); setNotice(error ? error.message : 'Weight verified and points issued.'); reload() }
   const redeem = async reward => {
     const { error } = await supabase.rpc('redeem_reward', { p_reward_name: reward.name, p_cost: reward.cost })
     // profile.points updates on its own via the live subscription in useAuth — no manual refresh needed
@@ -780,7 +808,7 @@ function App() {
 
   const onSaveName = async fullName => {
     if (!fullName) return
-    const { error } = await supabase.from('profiles').update({ full_name: fullName }).eq('id', session.user.id)
+    const { error } = await supabase.rpc('update_own_full_name', { p_new_name: fullName })
     if (!error) refreshProfile()
   }
 
