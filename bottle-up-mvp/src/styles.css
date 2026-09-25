@@ -247,3 +247,5 @@
    ============================================================ */
 .trackingCard{margin-bottom:18px}
 .trackingCard .sectionHead{margin-bottom:10px}
+
+.configBack{position:absolute;top:20px;left:20px;z-index:10;border:1px solid var(--line);border-radius:8px;padding:12px 16px;background:var(--surface);color:var(--cream)}

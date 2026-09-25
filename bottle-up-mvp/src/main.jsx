@@ -1,18 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
-  ArrowRight, Bell, Camera, Check, ChevronRight, Coins, Eye, EyeOff, Gift, Home, Leaf,
+  ArrowRight, Bell, Camera, Check, ChevronRight, Coins, Gift, Home, Leaf,
   MapPin, Package, Pencil, Recycle, ShieldCheck, Truck, UserRound, Users,
   WalletCards, Weight, X
-} from 'lucide-react'
+} from './components/Icons.jsx'
 import './styles.css'
-import { supabase, supabaseConfigError } from './lib/supabase.js'
+import Landing from './components/Landing.jsx'
+import { AuthLayout, AuthPanel, ResetPasswordScreen } from './components/AuthPages.jsx'
+import { BrandMark } from './components/Brand.jsx'
+import { supabase } from './lib/supabase.js'
 import { geocode, staticMapUrl } from './lib/mapbox.js'
-
-function PasswordField({ label, value, onChange, placeholder }) {
-  const [visible, setVisible] = useState(false)
-  return <label className="authLabel">{label}<div className="passwordField"><input className="authInput" type={visible ? 'text' : 'password'} required minLength={8} value={value} onChange={onChange} placeholder={placeholder} /><button type="button" className="passwordToggle" onClick={() => setVisible(v => !v)} tabIndex={-1} aria-label={visible ? 'Hide password' : 'Show password'}>{visible ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
-}
 
 function useAuth() {
   const [session, setSession] = useState(undefined) // undefined = still checking, null = signed out
@@ -192,7 +190,7 @@ function BottleGauge({ progress = 0 }) {
 }
 
 function Logo({ size = 34 }) {
-  return <div className="logoMark" style={{ width: size, height: size }} aria-hidden="true"><Recycle size={size * .62} strokeWidth={2.7} /></div>
+  return <div className="logoMark" style={{ width: size, height: size, background: 'transparent', boxShadow: 'none', color: 'var(--cream)', '--brand-mark-cutout': 'var(--ink)' }} aria-hidden="true"><BrandMark size={size} /></div>
 }
 
 const AVATAR_TONES = ['t1', 't2', 't3', 't4', 't5']
@@ -209,73 +207,6 @@ function avatarTone(name, email) {
 }
 function Avatar({ name, email, size = 'md' }) {
   return <span className={`avatar avatar-${size} ${avatarTone(name, email)}`}>{initials(name, email)}</span>
-}
-
-function Landing({ onAuth, onLegal }) {
-  return <div className="landing">
-    <header className="landingNav"><div className="brand"><Logo /><span>Bottle<span>Up</span></span></div><button className="ghostButton" onClick={() => onAuth('signin')}>Sign in <ArrowRight size={15} /></button></header>
-    <main>
-      <section className="landingHero">
-        <div className="landingCopy">
-          <span className="eyebrow"><Leaf size={13} />RECYCLING THAT COMES BACK TO YOU</span>
-          <h1>Don’t throw it away.<br /><em>Put it to work.</em></h1>
-          <p>BottleUp makes recycling easier. Schedule a pickup, get your materials collected and verified, then earn points you can use for rewards.</p>
-          <div className="landingActions"><button className="primary large" onClick={() => onAuth('signup')}>Start recycling <ArrowRight size={17} /></button><a href="#how">See how it works</a></div>
-        </div>
-        <div className="landingVisual"><div className="bottleIllustration"><Recycle size={92} strokeWidth={1.2} /><span>RECYCLE<br />REPEAT<br />REWARD</span></div><div className="floatCard"><Check size={16} /><div><strong>Collection verified</strong><span>5.2 kg · +520 points</span></div></div></div>
-      </section>
-
-      <section className="problem" id="why"><div><span className="eyebrow">WHY BOTTLEUP</span><h2>Recycling shouldn't feel like a dead end.</h2></div><p>There is recyclable material everywhere, but collection is often scattered. People hand materials over without knowing where they went, how much was actually recovered or whether they received fair value. BottleUp brings the journey into one place.</p></section>
-
-      <section className="how" id="how"><div className="sectionIntro"><span className="eyebrow">HOW IT WORKS</span><h2>One simple loop.</h2><p>From the bag in your home to a verified collection — and back again.</p></div>
-        <div className="loopFlow">{[
-          [Leaf,'Recycle','Set aside your plastic instead of throwing it away.'],
-          [Package,'Schedule','Tell us what you have, how much and where to collect it.'],
-          [Truck,'Get collected','A collector accepts the request and handles the pickup.'],
-          [ShieldCheck,'Get verified','Weight is confirmed and your points are issued.'],
-        ].map(([Icon,t,b], i, arr) => <React.Fragment key={t}><div className="loopStep"><span className="loopBadge"><Icon size={18} /></span><strong>{t}</strong><p>{b}</p></div>{i < arr.length - 1 && <span className="loopArrow"><ChevronRight size={16} /></span>}</React.Fragment>)}</div>
-        <div className="loopReturn"><span className="loopSpin"><Recycle size={15} /></span>Then it repeats — every verified kg starts the loop again.</div>
-      </section>
-
-      <section className="landingReward"><div><span className="eyebrow">EARN AS YOU RECYCLE</span><h2>1 kg of verified plastic = <strong>100 points.</strong></h2><p>Your points build with every verified collection. Rewards shown in the pilot can be redeemed once the corresponding reward partner is active.</p></div><div className="pointPill"><Coins size={19} /><strong>100</strong><span>points / kg</span></div></section>
-    </main>
-    <footer className="landingFooter"><div className="brand"><Logo size={28} /><span>Bottle<span>Up</span></span></div><span>Recycle better. Track it. Get rewarded.</span><div className="legalLinks"><button onClick={() => onLegal('privacy')}>Privacy</button><button onClick={() => onLegal('terms')}>Terms</button></div></footer>
-  </div>
-}
-
-function ResetPasswordScreen({ onDone }) {
-  const [password, setPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [message, setMessage] = useState('')
-  const [error, setError] = useState(false)
-  const [busy, setBusy] = useState(false)
-
-  const submit = async e => {
-    e.preventDefault()
-    if (password !== confirm) { setMessage('Passwords do not match.'); setError(true); return }
-    setBusy(true)
-    setMessage('')
-    setError(false)
-    const { error } = await supabase.auth.updateUser({ password })
-    setBusy(false)
-    if (error) { setMessage(error.message); setError(true); return }
-    setMessage('Password updated. Taking you in…')
-    setTimeout(onDone, 1200)
-  }
-
-  return <div className="authGate">
-    <div className="authCard">
-      <div className="authBrand"><Logo /><span>Bottle<span>Up</span></span></div>
-      <h1 className="authTitle">Set a new password</h1>
-      <p className="authCopy">You're verified via the reset link — choose a new password for your account.</p>
-      <form className="authForm" onSubmit={submit}>
-        <PasswordField label="New password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 8 characters" />
-        <PasswordField label="Confirm password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Type it again" />
-        <button className="authButton" disabled={busy} type="submit">{busy ? 'Saving…' : 'Update password'}</button>
-        {message && <div className={`authMessage ${error ? 'authError' : ''}`}>{message}</div>}
-      </form>
-    </div>
-  </div>
 }
 
 function LegalScreen({ page, onBack }) {
@@ -303,86 +234,7 @@ function LegalScreen({ page, onBack }) {
     <h2>Changes</h2>
     <p>Because BottleUp is actively being built, these terms may change as features are added. We'll aim to keep this page current with what the product actually does.</p>
   </>
-  return <div className="authGate"><div className="authCard legalCard"><button className="iconButton authBack" onClick={onBack}><X size={18} /></button><div className="authBrand"><Logo /><span>Bottle<span>Up</span></span></div><h1 className="authTitle">{page === 'privacy' ? 'Privacy Policy' : 'Terms of Use'}</h1><div className="legalBody">{page === 'privacy' ? privacy : terms}</div></div></div>
-}
-
-function ConfigScreen() {
-  return <div className="authGate"><div className="authCard"><div className="authBrand"><Logo /><span>Bottle<span>Up</span></span></div><h1 className="authTitle">Supabase is not configured</h1><p className="authCopy">Add the Supabase Project URL and browser-safe publishable/anon key to the deployment environment.</p><div className="authMessage authConfig">{supabaseConfigError || 'No valid Supabase configuration was found.'}</div></div></div>
-}
-
-function AuthPanel({ mode: initialMode, onBack }) {
-  const [mode, setMode] = useState(initialMode) // 'signin' | 'signup' | 'forgot'
-  const [fields, setFields] = useState({ fullName: '', phone: '', email: '', password: '', wantsCollector: false })
-  const [message, setMessage] = useState('')
-  const [error, setError] = useState(false)
-  const [busy, setBusy] = useState(false)
-
-  const set = (key, value) => setFields(f => ({ ...f, [key]: value }))
-
-  const submit = async e => {
-    e.preventDefault()
-    setBusy(true)
-    setMessage('')
-    setError(false)
-    try {
-      if (mode !== 'forgot' && fields.password.length < 8) {
-        setMessage('Password must be at least 8 characters.'); setError(true); return
-      }
-      if (mode === 'forgot') {
-        const { error } = await supabase.auth.resetPasswordForEmail(fields.email, { redirectTo: window.location.origin })
-        if (error) { setMessage(error.message); setError(true) }
-        else { setMessage('If an account exists for that email, a reset link is on its way.'); setError(false) }
-        return
-      }
-
-      const result = mode === 'signup'
-        ? await supabase.auth.signUp({ email: fields.email, password: fields.password, options: { data: { full_name: fields.fullName, phone: fields.phone, wants_collector: fields.wantsCollector } } })
-        : await supabase.auth.signInWithPassword({ email: fields.email, password: fields.password })
-
-      if (result.error) { setMessage(result.error.message); setError(true); return }
-
-      if (mode === 'signup' && !result.data.session) {
-        setMessage(fields.wantsCollector
-          ? 'Account created. Check your email to confirm your address, then sign in — your collector application will be reviewed separately.'
-          : 'Account created. Check your email to confirm your address, then come back and sign in.')
-        setError(false)
-        setMode('signin')
-        return
-      }
-      // A session now exists — the useAuth listener at the top level picks it up
-      // and swaps this panel for the real app automatically.
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Authentication failed. Please try again.')
-      setError(true)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return <div className="authGate">
-    <div className="authCard">
-      <button className="iconButton authBack" onClick={onBack}><X size={18} /></button>
-      <div className="authBrand"><Logo /><span>Bottle<span>Up</span></span></div>
-      <h1 className="authTitle">{mode === 'forgot' ? 'Reset your password' : 'Recycle. Reward. Repeat.'}</h1>
-      <p className="authCopy">{mode === 'forgot' ? "Enter the email on your account and we'll send a link to set a new password." : 'Create your BottleUp account or sign in to schedule pickups and keep your recycling activity attached to your account.'}</p>
-      {mode !== 'forgot' && <div className="authTabs">
-        <button className={`authTab ${mode === 'signin' ? 'active' : ''}`} type="button" onClick={() => { setMode('signin'); setMessage('') }}>Sign in</button>
-        <button className={`authTab ${mode === 'signup' ? 'active' : ''}`} type="button" onClick={() => { setMode('signup'); setMessage('') }}>Create account</button>
-      </div>}
-      <form className="authForm" onSubmit={submit}>
-        {mode === 'signup' && <label className="authLabel">Full name<input className="authInput" required value={fields.fullName} onChange={e => set('fullName', e.target.value)} placeholder="Your name" /></label>}
-        {mode === 'signup' && <label className="authLabel">Phone<input className="authInput" value={fields.phone} onChange={e => set('phone', e.target.value)} placeholder="080..." /></label>}
-        {mode === 'signup' && <label className="authCheck"><input type="checkbox" checked={fields.wantsCollector} onChange={e => set('wantsCollector', e.target.checked)} /><span>I'd like to apply to become a collector <em>(reviewed by BottleUp before it takes effect)</em></span></label>}
-        <label className="authLabel">Email<input className="authInput" type="email" required value={fields.email} onChange={e => set('email', e.target.value)} placeholder="you@example.com" /></label>
-        {mode !== 'forgot' && <PasswordField label="Password" value={fields.password} onChange={e => set('password', e.target.value)} placeholder="At least 8 characters" />}
-        {mode === 'signin' && <button type="button" className="authForgot" onClick={() => { setMode('forgot'); setMessage('') }}>Forgot password?</button>}
-        <button className="authButton" disabled={busy} type="submit">{busy ? 'Please wait…' : mode === 'forgot' ? 'Send reset link' : mode === 'signup' ? 'Create account' : 'Sign in'}</button>
-        {mode === 'forgot' && <button type="button" className="authForgot" onClick={() => { setMode('signin'); setMessage('') }}>Back to sign in</button>}
-        {message && <div className={`authMessage ${error ? 'authError' : ''}`}>{message}</div>}
-      </form>
-      <div className="authNote">Your account is secured by Supabase Auth. Your pickup data is tied to your authenticated user.</div>
-    </div>
-  </div>
+  return <AuthLayout mode="legal" onBack={onBack}><span className="bu-auth-eyebrow">A LITTLE CLARITY</span><h1>{page === 'privacy' ? 'Privacy Policy' : 'Terms of Use'}</h1><div className="legalBody">{page === 'privacy' ? privacy : terms}</div></AuthLayout>
 }
 
 function StageTracker({ status }) {
@@ -795,14 +647,13 @@ function App() {
   const [authMode, setAuthMode] = useState(null)
   const [legalPage, setLegalPage] = useState(null)
 
-  if (supabaseConfigError) return <ConfigScreen />
   if (loading) return null
   if (legalPage) return <LegalScreen page={legalPage} onBack={() => setLegalPage(null)} />
   if (recovering) return <ResetPasswordScreen onDone={clearRecovering} />
 
   if (!session) {
     return authMode
-      ? <AuthPanel mode={authMode} onBack={() => setAuthMode(null)} />
+      ? <AuthPanel mode={authMode} onBack={() => setAuthMode(null)} onLegal={setLegalPage} />
       : <Landing onAuth={setAuthMode} onLegal={setLegalPage} />
   }
 
