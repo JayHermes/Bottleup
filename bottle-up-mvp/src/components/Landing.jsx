@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Brand from "./Brand.jsx";
 import { Icon } from "./Icons.jsx";
 import "./landing.css";
@@ -27,6 +27,47 @@ const faqs = [
 ];
 
 export default function Landing({ onAuth, onLegal }) {
+  const pageRef = useRef(null);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const elements = [
+      ...pageRef.current.querySelectorAll(
+        ".bu-section-heading, .bu-step, .bu-rewards-art, .bu-rewards-copy, .bu-community, .bu-faq > div, .bu-final-cta, .bu-footer-top",
+      ),
+    ];
+    if (media.matches || !("IntersectionObserver" in window)) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("bu-in-view");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.08 },
+    );
+    elements.forEach((element) => {
+      // Keep content already on screen visible, including direct section links.
+      if (element.getBoundingClientRect().top < window.innerHeight) return;
+      element.classList.add("bu-reveal");
+      observer.observe(element);
+    });
+    const revealAll = () => {
+      if (media.matches) {
+        observer.disconnect();
+        elements.forEach((element) => element.classList.add("bu-in-view"));
+      }
+    };
+    media.addEventListener("change", revealAll);
+    return () => {
+      observer.disconnect();
+      media.removeEventListener("change", revealAll);
+      elements.forEach((element) =>
+        element.classList.remove("bu-reveal", "bu-in-view"),
+      );
+    };
+  }, []);
   const [menuOpen, setMenuOpen] = useState(false);
   const [kilograms, setKilograms] = useState(5);
   const enter = (mode) => {
@@ -34,7 +75,7 @@ export default function Landing({ onAuth, onLegal }) {
     onAuth(mode);
   };
   return (
-    <div className="bu-landing" id="top">
+    <div className="bu-landing" id="top" ref={pageRef}>
       <a className="bu-skip" href="#main-content">
         Skip to content
       </a>

@@ -1343,3 +1343,107 @@ html:has(.bu-landing) {
 .bu-landing .bu-button-ink {
   background: #205c42;
 }
+
+/* Soft surfaces separate sections without drawn divider lines. */
+.bu-header,
+.bu-materials,
+.bu-rewards-wrap,
+.bu-faq-wrap,
+.bu-calculator,
+.bu-faq-list details,
+.bu-faq-list details:first-child,
+.bu-footer-bottom,
+.bu-mobile-nav {
+  border: 0;
+}
+.bu-signin {
+  border-color: transparent !important;
+  background: #e7eddc;
+}
+.bu-faq-list {
+  display: grid;
+  gap: 10px;
+}
+.bu-faq-list details {
+  background: #f4f6f1;
+  border-radius: 10px;
+  padding-inline: 20px;
+}
+.bu-calculator {
+  background: #faf6e8;
+  border-radius: 12px;
+  padding: 21px;
+}
+
+/* The desktop opening frame contains only navigation and the hero. */
+@media (min-width: 801px) {
+  .bu-hero {
+    min-height: calc(100svh - 94px);
+    padding-block: 54px;
+  }
+  .bu-hero-art {
+    align-self: center;
+    height: min(650px, calc(100svh - 202px));
+    min-height: 430px;
+  }
+  .bu-hero-art > img {
+    max-height: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html:has(.bu-landing) {
+    scroll-behavior: smooth;
+  }
+  .bu-reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition:
+      opacity 0.7s ease,
+      transform 0.7s cubic-bezier(0.2, 0.65, 0.3, 1);
+  }
+  .bu-reveal.bu-in-view,
+  .bu-reveal:focus-within {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .bu-step:nth-child(2) {
+    transition-delay: 90ms;
+  }
+  .bu-step:nth-child(3) {
+    transition-delay: 180ms;
+  }
+  .bu-hero-copy {
+    animation: bu-arrive 0.75s ease both;
+  }
+  .bu-hero-art {
+    animation: bu-arrive 0.95s 0.12s ease both;
+  }
+  .bu-button .appIcon,
+  .bu-text-link .appIcon {
+    transition: transform 0.25s ease;
+  }
+  .bu-button:hover .appIcon,
+  .bu-text-link:hover .appIcon {
+    transform: translateX(3px);
+  }
+  .bu-faq-list details {
+    transition: background 0.25s ease;
+  }
+  .bu-faq-list details[open] {
+    background: #fcfcf6;
+  }
+  .bu-faq-list details[open] p {
+    animation: bu-arrive 0.3s ease both;
+  }
+}
+@keyframes bu-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
