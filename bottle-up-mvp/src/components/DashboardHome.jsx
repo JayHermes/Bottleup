@@ -103,7 +103,7 @@ export default function DashboardHome({
           <div className="dashSectionTitle">
             <div>
               <span className="eyebrow">ONE BAG AT A TIME</span>
-              <h2>Your recycling rhythm</h2>
+              <h2>Your recycling progress</h2>
             </div>
             <span className="dashBadge">
               {kg >= 50
@@ -139,18 +139,18 @@ export default function DashboardHome({
           </div>
         </section>
         <section className="dashTip">
-          <span className="eyebrow">A LITTLE PREP GOES A LONG WAY</span>
+          <span className="eyebrow">WE’LL TAKE IT FROM HERE</span>
           <h2>
-            Empty. Rinse.
+            Gather your plastic.
             <br />
-            Ready to go.
+            We’ll do the rest.
           </h2>
           <p>
-            Keep bottles clean and dry, then gather them in a bag before your
-            collector arrives.
+            Keep your plastic together for collection. Our recycling team handles
+            the cleaning, so you don’t have to.
           </p>
           <button className="textButton" onClick={onNew}>
-            Put good habits to work <ArrowRight size={16} />
+            Schedule a pickup <ArrowRight size={16} />
           </button>
           <Leaf size={58} />
         </section>

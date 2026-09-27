@@ -6,7 +6,7 @@ import "./landing.css";
 const faqs = [
   [
     "What can I give for recycling?",
-    "You can request a pickup for PET bottles, plastic containers, HDPE plastic, or mixed plastic. Empty your containers, give them a quick rinse, and keep them together in a bag for collection.",
+    "You can request a pickup for PET bottles, plastic containers, HDPE plastic, or mixed plastic. Keep your plastic together for collection. Our recycling team handles the cleaning.",
   ],
   [
     "How does a pickup work?",
@@ -239,12 +239,12 @@ export default function Landing({ onAuth, onLegal }) {
                 <span className="bu-drawing-dot" />
               </div>
               <h3>
-                A little sorting.
+                Gather your plastic.
                 <br />A good start.
               </h3>
               <p>
-                Empty and rinse your plastic. Bag it up, then tell us what you
-                have and where to collect it.
+                Gather your plastic, then tell us what you have and where to collect
+                it. Our recycling team handles the cleaning.
               </p>
             </article>
             <article className="bu-step bu-step-blue">
