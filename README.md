@@ -40,3 +40,11 @@ When the Supabase credentials arrive, set the frontend URL and publishable/anon 
 The refresh includes verified-weight impact totals independent of point redemptions, pickup filters/search, reward confirmation, account help, and bank-details create/edit/remove flows. Live persistence must be verified against the actual Supabase project once credentials are supplied.
 
 The isolated PostgreSQL test is `bottle-up-mvp/tests/bank-accounts.test.mjs`. Run it with `node --test` where `@electric-sql/pglite` is installed, or set `PGLITE_MODULE` to that package's absolute module path. It checks owner access, cross-user isolation, anonymous denial, valid updates/removal, and 10-digit validation.
+
+### Pickup photos
+
+Photos use the private Supabase `pickup-photos` bucket, not Firebase. The storage update is recorded in `bottle-up-mvp/supabase/pickup-photo-storage.sql` and incorporated into the full setup schema. The live storage migration was applied separately; do not rerun the full application schema against production.
+
+Users select JPEG, PNG or WebP images up to 8 MB. The browser re-encodes to JPEG, strips metadata and limits dimensions to 1600 pixels. Unsupported/undecodable images produce an error instead of uploading the original. Unique object paths live under the authenticated user's ID. Request cards retrieve five-minute signed URLs on demand. The owner, assigned collector and admins can read attached photos; no public reads are allowed. Failed pickup inserts attempt to remove the unlinked uploaded object, with an explicit message if cleanup fails.
+
+The policy test `bottle-up-mvp/tests/pickup-photo-storage.test.mjs` uses the same PGlite setup as the bank-details test. A live signed-in Storage API upload, pickup insert and participant download remain an end-to-end release check; the development dashboard preview intentionally cannot perform uploads.

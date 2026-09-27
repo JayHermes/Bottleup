@@ -9,6 +9,7 @@ import './styles.css'
 import './components/dashboard.css'
 import DashboardHome from './components/DashboardHome.jsx'
 import BankAccount from './components/BankAccount.jsx'
+import PickupPhoto from './components/PickupPhoto.jsx'
 import Landing from './components/Landing.jsx'
 import { AuthLayout, AuthPanel, ResetPasswordScreen } from './components/AuthPages.jsx'
 import { BrandMark, BrandLogo } from './components/Brand.jsx'
@@ -124,10 +125,10 @@ async function normalizeImage(file) {
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
     bitmap.close()
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.82))
-    if (!blob) return file
+    if (!blob) throw new Error('Image conversion failed')
     return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' })
   } catch {
-    return file
+    throw new Error('This photo could not be processed. Please choose a JPEG, PNG or WebP image.')
   }
 }
 
@@ -251,7 +252,7 @@ function Stat({ icon: Icon, value, label }) { return <div className="miniStat"><
 function RequestCard({ request, action, compact = false, distanceKm }) {
   const weight = request.actual_weight_kg || request.estimated_weight_kg
   const earnedPoints = request.status === 'VERIFIED' ? Math.round((request.actual_weight_kg || 0) * POINTS_PER_KG) : 0
-  return <article className={`requestCard ${compact ? 'compact' : ''}`}><div className="requestTop"><div className="requestIcon"><Package size={18} /></div><div className="requestMain"><div className="requestTitle">{request.material_type}</div><div className="requestMeta"><span>{request.id.slice(0, 8)}</span><span><MapPin size={12} />{request.pickup_location}</span><span><Weight size={12} />{weight} kg</span>{distanceKm != null && <span className="distanceBadge">{distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` : `${distanceKm.toFixed(1)} km`} away</span>}</div></div><span className={`status ${request.status.toLowerCase()}`}>{STATUS_LABEL[request.status]}</span></div><StageTracker status={request.status} />{(earnedPoints > 0 || action) && <div className="requestBottom">{earnedPoints > 0 ? <span className="points"><Coins size={14} />+{earnedPoints} points</span> : <span />}{action}</div>}</article>
+  return <article className={`requestCard ${compact ? 'compact' : ''}`}><div className="requestTop"><div className="requestIcon"><Package size={18} /></div><div className="requestMain"><div className="requestTitle">{request.material_type}</div><div className="requestMeta"><span>{request.id.slice(0, 8)}</span><span><MapPin size={12} />{request.pickup_location}</span><span><Weight size={12} />{weight} kg</span>{distanceKm != null && <span className="distanceBadge">{distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` : `${distanceKm.toFixed(1)} km`} away</span>}</div></div><span className={`status ${request.status.toLowerCase()}`}>{STATUS_LABEL[request.status]}</span></div><StageTracker status={request.status} /><PickupPhoto path={request.photo_url} />{(earnedPoints > 0 || action) && <div className="requestBottom">{earnedPoints > 0 ? <span className="points"><Coins size={14} />+{earnedPoints} points</span> : <span />}{action}</div>}</article>
 }
 
 function EmptyState({ icon: Icon = Package, title, body }) { return <div className="emptyState"><div className="emptyIcon"><Icon size={22} /></div><strong>{title}</strong><p>{body}</p></div> }
@@ -273,7 +274,7 @@ function PickupModal({ onSubmit, close }) {
   const onPhoto = e => {
     const file = e.target.files?.[0] || null
     if (file) {
-      if (!file.type.startsWith('image/')) { setLocateError(''); setError('Please choose an image file.'); e.target.value = ''; return }
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setLocateError(''); setError('Please choose a JPEG, PNG or WebP photo.'); e.target.value = ''; return }
       if (file.size > 8 * 1024 * 1024) { setError('That photo is over 8MB — try a smaller one.'); e.target.value = ''; return }
     }
     setError('')
@@ -314,7 +315,7 @@ function PickupModal({ onSubmit, close }) {
       {preview
         ? <img src={preview} alt="Your plastic" />
         : <div className="photoPlaceholder"><Camera size={26} /><strong>Add a photo</strong><span>Helps verify weight faster · optional</span></div>}
-      <input type="file" accept="image/*" onChange={onPhoto} />
+      <input type="file" accept="image/jpeg,image/png,image/webp" onChange={onPhoto} />
     </label>
 
     <form id="pickupForm" className="pickupForm" onSubmit={submit}>
@@ -603,7 +604,7 @@ function AppShell({ onExit, profile, email, userId, onSaveName, preview = false 
       // Private bucket + RLS-scoped path (`<user_id>/<file>`). The stored value
       // is the object path, not a public URL.
       const safePhoto = await normalizeImage(photo)
-      const path = `${userId}/${Date.now()}-${safePhoto.name}`
+      const path = `${userId}/${crypto.randomUUID()}.jpg`
       const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, safePhoto)
       if (upErr) return upErr
       photo_url = path
@@ -612,6 +613,10 @@ function AppShell({ onExit, profile, email, userId, onSaveName, preview = false 
       user_id: userId, material_type: type, estimated_weight_kg: Number(estimate), pickup_location: location, photo_url,
       latitude: coords?.lat ?? null, longitude: coords?.lng ?? null,
     })
+    if (error && photo_url) {
+      const { error: cleanupError } = await supabase.storage.from(PHOTO_BUCKET).remove([photo_url])
+      if (cleanupError) return new Error('Pickup could not be saved. The photo may remain in your private storage. Please retry the request.')
+    }
     if (!error) { reload(); setScreen('pickups'); setNotice('Pickup request submitted.') }
     return error
   }

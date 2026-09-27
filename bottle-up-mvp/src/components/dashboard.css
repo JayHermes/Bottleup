@@ -924,3 +924,7 @@
 .dashboard .dashColumns {
   grid-template-columns: minmax(0, 1fr);
 }
+
+.pickupPhoto { margin-top: 16px; }
+.pickupPhoto img { display: block; max-width: 100%; width: 420px; max-height: 320px; object-fit: contain; border-radius: 16px; margin-top: 12px; }
+.pickupPhoto p { font-size: 12px; margin-top: 8px; }
