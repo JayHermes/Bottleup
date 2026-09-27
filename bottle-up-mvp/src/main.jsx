@@ -6,6 +6,9 @@ import {
   WalletCards, Weight, X
 } from './components/Icons.jsx'
 import './styles.css'
+import './components/dashboard.css'
+import DashboardHome from './components/DashboardHome.jsx'
+import BankAccount from './components/BankAccount.jsx'
 import Landing from './components/Landing.jsx'
 import { AuthLayout, AuthPanel, ResetPasswordScreen } from './components/AuthPages.jsx'
 import { BrandMark } from './components/Brand.jsx'
@@ -137,7 +140,7 @@ function usePickupRequests(userId) {
     // RLS already scopes this to what the signed-in account is allowed to see —
     // own requests for a user, available + assigned for a collector, everything for an admin.
     supabase.from('pickup_requests').select('*').order('created_at', { ascending: false })
-      .then(({ data, error }) => { if (error) setRequestsError(error.message); else { setRequests(data); setRequestsError('') } })
+      .then(({ data, error }) => { if (error) { setRequestsError(error.message); setRequests([]) } else { setRequests(data); setRequestsError('') } })
   }
 
   useEffect(() => {
@@ -156,7 +159,7 @@ function usePickupRequests(userId) {
 const PLASTIC_TYPES = ['PET Bottles', 'Plastic Containers', 'HDPE Plastic', 'Mixed Plastic']
 const STAGES = ['Submitted', 'Accepted', 'On the way', 'Collected', 'Verified']
 const STATUS_TO_STAGE = { AVAILABLE: 0, ACCEPTED: 1, ON_THE_WAY: 2, COLLECTED: 3, VERIFIED: 4 }
-const STATUS_LABEL = { AVAILABLE: 'Awaiting collector', ACCEPTED: 'Collector assigned', ON_THE_WAY: 'On the way', COLLECTED: 'Collected', VERIFIED: 'Verified' }
+const STATUS_LABEL = { AVAILABLE: 'Awaiting collector', ACCEPTED: 'Collector assigned', ON_THE_WAY: 'On the way', COLLECTED: 'Collected', VERIFIED: 'Verified', DELIVERED: 'Delivered for verification', CANCELLED: 'Cancelled' }
 const POINTS_PER_KG = 100
 const PHOTO_BUCKET = 'pickup-photos'
 const REWARDS = [
@@ -238,6 +241,7 @@ function LegalScreen({ page, onBack }) {
 }
 
 function StageTracker({ status }) {
+  if (status === 'CANCELLED') return <p className="requestMeta">This request was cancelled.</p>
   const idx = STATUS_TO_STAGE[status] ?? 0
   return <div className="stageWrap"><div className="stages">{STAGES.map((label, i) => <React.Fragment key={label}><span className={`stageDot ${i <= idx ? 'done' : ''}`}>{i < idx ? <Check size={9} /> : i === idx ? <span /> : null}</span>{i < STAGES.length - 1 && <span className={`stageLine ${i < idx ? 'done' : ''}`} />}</React.Fragment>)}</div><div className="stageLabels">{STAGES.map((label, i) => <span className={i <= idx ? 'done' : ''} key={label}>{label}</span>)}</div></div>
 }
@@ -295,15 +299,16 @@ function PickupModal({ onSubmit, close }) {
     setError('')
     // If they didn't tap "use my location," fall back to converting what they
     // typed into coordinates, so distance-sorting still works for this pickup.
-    const finalCoords = coords || await geocode(`${location}, Nigeria`)
-    const err = await onSubmit({ type, estimate, location, photo, coords: finalCoords })
-    setBusy(false)
-    if (err) setError(err.message || 'Could not submit this request. Please try again.')
-    else close()
+    try {
+      const finalCoords = coords || await geocode(`${location}, Nigeria`)
+      const err = await onSubmit({ type, estimate, location, photo, coords: finalCoords })
+      if (err) setError(err.message || 'Could not submit this request. Please try again.')
+      else close()
+    } catch { setError('Could not submit this request. Please try again.') } finally { setBusy(false) }
   }
 
   return <div className="pickupFlow">
-    <div className="pickupHead"><button className="iconButton" onClick={close}><X size={18} /></button><span className="eyebrow">NEW COLLECTION</span><span style={{ width: 34 }} /></div>
+    <div className="pickupHead"><button className="iconButton" aria-label="Close pickup form" onClick={close}><X size={18} /></button><span className="eyebrow">NEW COLLECTION</span><span style={{ width: 34 }} /></div>
 
     <label className="photoHero">
       {preview
@@ -329,38 +334,14 @@ function PickupModal({ onSubmit, close }) {
   </div>
 }
 
-function UserHome({ requests, setScreen, onSubmitPickup, profile, userId }) {
-  const myRequests = requests.filter(r => r.user_id === userId)
-  const points = profile?.points || 0
-  const myKg = points / POINTS_PER_KG
-  const tierInfo = useMemo(() => { let current = TIERS[0], next = null; for (const tier of TIERS) { if (myKg >= tier.from) current = tier; else { next = tier; break } } return { current, next, progress: next ? Math.max(0, Math.min(1, (myKg - current.from) / (next.from - current.from))) : 1 } }, [myKg])
-  const [showForm, setShowForm] = useState(false)
-  const active = myRequests.find(r => r.status !== 'VERIFIED')
-  return <>
-    <section className="hero"><div className="heroCopy"><span className="eyebrow"><Leaf size={13} />YOUR IMPACT</span><h1>Keep plastic moving.</h1><p>Recycle your plastic, get it collected, and earn BottleUp Points.</p><button className="primary large" onClick={() => setShowForm(true)}>Schedule a pickup <ArrowRight size={17} /></button></div><div className="heroOrb"><Recycle size={54} strokeWidth={1.5} /><span>Small action.<br />Real impact.</span></div></section>
-    <section className="jarHero">
-      <BottleGauge progress={tierInfo.progress} />
-      <div className="jarCopy">
-        <span className="eyebrow"><Recycle size={13} />YOUR IMPACT</span>
-        <div className="jarKg">{myKg.toFixed(1)}<small>kg recycled</small></div>
-        <div className="jarMeta"><span className="tierChip">{tierInfo.current.name} tier</span><span>{tierInfo.next ? `${Math.max(0, tierInfo.next.from - myKg).toFixed(1)} kg to ${tierInfo.next.name}` : 'Top tier reached'}</span></div>
-        <div className="progress"><span style={{ width: `${Math.max(4, tierInfo.progress * 100)}%` }} /></div>
-      </div>
-      <div className="jarPoints"><Coins size={18} /><strong>{points.toLocaleString()}</strong><span>points</span></div>
-    </section>
-    {active && <section className="activePickup"><div><span className="eyebrow">ACTIVE PICKUP</span><h2>{active.material_type}</h2><p>{active.pickup_location} · {active.estimated_weight_kg} kg estimated</p></div><div className="activeRight"><span className="status available">{STATUS_LABEL[active.status]}</span><button className="textButton" onClick={() => setScreen('pickups')}>Track <ChevronRight size={15} /></button></div><StageTracker status={active.status} /></section>}
-    <section className="sectionHead"><div><span className="eyebrow">ACTIVITY</span><h2>Recent pickups</h2></div><button className="textButton" onClick={() => setScreen('pickups')}>View all <ChevronRight size={15} /></button></section>
-    {myRequests.length ? <div className="requestList">{myRequests.slice(0, 3).map(r => <RequestCard key={r.id} request={r} />)}</div> : <EmptyState title="No pickups yet" body="Schedule your first collection and your history will appear here." />}
-    {showForm && <PickupModal onSubmit={onSubmitPickup} close={() => setShowForm(false)} />}
-  </>
-}
-
-function PickupsScreen({ requests, userId }) {
-  const mine = requests.filter(r => r.user_id === userId)
+function PickupsScreen({ requests, userId, onNew }) {
+  const [filter, setFilter] = useState('All')
+  const [search, setSearch] = useState('')
+  const mine = requests.filter(r => r.user_id === userId && (filter === 'All' || (filter === 'Verified' ? r.status === 'VERIFIED' : !['VERIFIED', 'CANCELLED'].includes(r.status))) && `${r.material_type} ${r.pickup_location}`.toLowerCase().includes(search.toLowerCase()))
   const tracking = mine.find(r => ['ACCEPTED', 'ON_THE_WAY'].includes(r.status) && r.latitude != null && r.collector_latitude != null)
   const distance = tracking ? haversineKm(tracking.latitude, tracking.longitude, tracking.collector_latitude, tracking.collector_longitude) : null
 
-  return <><PageTitle eyebrow="YOUR ACTIVITY" title="Pickups" body="Track every collection from request to verified weight." />
+  return <><PageTitle eyebrow="YOUR ACTIVITY" title="Pickups" body="Track every collection from request to verified weight." /><div className="pickupToolbar"><div className="filterTabs">{['All','Active','Verified'].map(label => <button key={label} aria-pressed={filter === label} onClick={() => setFilter(label)}>{label}</button>)}</div><input aria-label="Search pickups" placeholder="Search collections…" value={search} onChange={e => setSearch(e.target.value)}/><button className="primary" onClick={onNew}>New pickup</button></div>
     {tracking && (
       <section className="trackingCard">
         <div className="sectionHead"><div><span className="eyebrow">LIVE</span><h2>Your collector</h2></div>{distance != null && <span className="distanceBadge">{distance < 1 ? `${Math.round(distance * 1000)} m away` : `${distance.toFixed(1)} km away`}</span>}</div>
@@ -373,22 +354,32 @@ function PickupsScreen({ requests, userId }) {
         </React.Suspense>
       </section>
     )}
-    {mine.length ? <div className="requestList">{mine.map(r => <RequestCard key={r.id} request={r} />)}</div> : <EmptyState title="No pickups yet" body="Schedule your first collection from Home." />}<section className="history"><div className="sectionHead"><div><span className="eyebrow">HISTORY</span><h2>Verified collections</h2></div></div>{mine.filter(r => r.status === 'VERIFIED').map(r => <div className="historyRow" key={`h-${r.id}`}><div><strong>{new Date(r.verified_at || r.created_at).toLocaleDateString()}</strong><span>{r.actual_weight_kg} kg · {r.material_type}</span></div><span className="verified"><Check size={13} /> Verified</span></div>)}</section></>
+    {mine.length ? <div className="requestList">{mine.map(r => <RequestCard key={r.id} request={r} />)}</div> : <EmptyState title="No matching collections" body="Try another filter or book a new pickup." />}</>
 }
 
 function RewardsScreen({ points, redeem, redemptions }) {
+  const [busy, setBusy] = useState(false)
+  const [selected, setSelected] = useState(null)
+  const confirmationRef = useRef(null)
+  useEffect(() => { if (selected) confirmationRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }) }, [selected])
+  const [error, setError] = useState('')
+  async function confirmReward() {
+    setBusy(true); setError('')
+    try { await redeem(selected); setSelected(null) } catch { setError('Could not request this reward. Please retry.') } finally { setBusy(false) }
+  }
   const pending = redemptions.filter(r => r.status === 'pending')
-  return <><PageTitle eyebrow="YOUR REWARDS" title="Rewards" body="Turn your verified recycling into something useful." /><div className="rewardHero"><div className="rewardBalance"><Coins size={28} /><div><strong>{points.toLocaleString()}</strong><span>available points</span></div></div><span>100 points = 1 kg verified plastic</span></div><div className="sectionHead"><div><span className="eyebrow">MARKETPLACE</span><h2>Redeem your points</h2></div></div><div className="rewardGrid">{REWARDS.map(r => <div className="rewardCard" key={r.name}><div className="rewardIcon"><Gift size={20} /></div><div><strong>{r.name}</strong><p>{r.note}</p></div><div className="rewardCost"><span>{r.cost.toLocaleString()} pts</span><button className="secondary" disabled={points < r.cost} onClick={() => redeem(r)}>Redeem</button></div></div>)}</div>
+  return <><PageTitle eyebrow="YOUR REWARDS" title="Rewards" body="Turn your verified recycling into something useful." /><div className="rewardHero"><div className="rewardBalance"><Coins size={28} /><div><strong>{points.toLocaleString()}</strong><span>available points</span></div></div><span>100 points = 1 kg verified plastic</span></div><div className="sectionHead"><div><span className="eyebrow">MARKETPLACE</span><h2>Redeem your points</h2></div></div><div className="rewardGrid">{REWARDS.map(r => <div className="rewardCard" key={r.name}><div className="rewardIcon"><Gift size={20} /></div><div><strong>{r.name}</strong><p>{r.note}</p></div><div className="rewardCost"><span>{r.cost.toLocaleString()} pts</span><button className="secondary" disabled={busy || points < r.cost} onClick={() => { setSelected(r); setError('') }}>Redeem</button></div></div>)}</div>
     {redemptions.length > 0 && <><div className="sectionHead"><div><span className="eyebrow">HISTORY</span><h2>Your redemptions</h2></div></div><div className="requestList">{redemptions.map(r => <div className="historyRow" key={r.id}><div><strong>{r.reward_name}</strong><span>{r.cost} pts · {new Date(r.created_at).toLocaleDateString()}</span></div><span className={`status ${r.status}`}>{r.status === 'pending' ? 'Pending' : r.status === 'fulfilled' ? 'Fulfilled' : 'Declined — refunded'}</span></div>)}</div></>}
+    {selected && <section ref={confirmationRef} className="dashPanel" role="region" aria-label="Confirm reward"><h2>Redeem {selected.name}?</h2><p>This uses {selected.cost} points. The BottleUp team will fulfil the request after it is approved.</p>{error && <p role="alert">{error}</p>}<div className="dashActions"><button className="primary" disabled={busy} onClick={confirmReward}>{busy ? 'Requesting…' : 'Confirm redemption'}</button><button className="secondary" disabled={busy} onClick={() => setSelected(null)}>Cancel</button></div></section>}
     <div className="pilotNote"><ShieldCheck size={17} /><div><strong>Pilot rewards</strong><span>{pending.length > 0 ? `You have ${pending.length} redemption${pending.length > 1 ? 's' : ''} awaiting fulfilment.` : 'Reward fulfilment is handled by the BottleUp team as each partner activates. Your points remain attached to your account.'}</span></div></div></>
 }
 
-function WalletScreen({ points, redemptions }) {
-  const pendingCost = redemptions.filter(r => r.status === 'pending').reduce((a, r) => a + r.cost, 0)
-  return <><PageTitle eyebrow="BOTTLEUP WALLET" title="Wallet" body="Keep track of what you've earned and what is pending." /><div className="walletGrid"><div className="walletMain"><span>Available reward value</span><strong>₦{(Math.floor(points / 500) * 1000).toLocaleString()}</strong><small>based on redeemable rewards currently shown</small></div><div className="walletStat"><span>Total earned</span><strong>{points.toLocaleString()} pts</strong></div><div className="walletStat"><span>Pending rewards</span><strong>{pendingCost.toLocaleString()} pts</strong></div></div><div className="pilotNote"><WalletCards size={17} /><div><strong>Redemption, not cash withdrawal</strong><span>The MVP treats BottleUp Wallet as a reward balance. Cash-out infrastructure is intentionally not part of this pilot.</span></div></div></>
+function WalletScreen({ points, redemptions, userId, preview }) {
+  const pending = redemptions.filter(r => r.status === 'pending').reduce((a,r) => a + r.cost, 0)
+  return <><PageTitle eyebrow="YOUR BOTTLEUP WALLET" title="A little back. A lot of good." body="Your recycling rewards and bank details, together in one place."/><div className="walletGrid"><div className="walletMain"><span>Available points</span><strong>{points.toLocaleString()}<small> pts</small></strong><small>Earned through verified recycling</small></div><div className="walletStat"><span>Pending rewards</span><strong>{pending.toLocaleString()} pts</strong><p>Awaiting fulfilment</p></div></div><BankAccount userId={userId} preview={preview}/></>
 }
 
-function ProfileScreen({ profile, email, onSaveName, notify }) {
+function ProfileScreen({ profile, email, onSaveName, notify, onExit, setScreen, preview }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(profile?.full_name || '')
   const [saving, setSaving] = useState(false)
@@ -399,26 +390,20 @@ function ProfileScreen({ profile, email, onSaveName, notify }) {
   const startEdit = () => { setDraft(profile?.full_name || ''); setEditing(true) }
   const save = async () => {
     setSaving(true)
-    await onSaveName(draft.trim())
-    setSaving(false)
-    setEditing(false)
+    try { await onSaveName(draft.trim()); setEditing(false) } catch (error) { notify(error.message || 'Could not save your name.') } finally { setSaving(false) }
   }
 
   const deleteAccount = async () => {
     setDeleting(true)
     setDeleteError('')
+    if (preview || !supabase) { setDeleteError('Account deletion is unavailable in the design preview.'); setDeleting(false); return }
     const { error } = await supabase.rpc('delete_own_account')
     if (error) { setDeleteError(error.message); setDeleting(false); return }
     // Account is gone — the session is no longer valid, sign out client-side to land back on the landing page.
     supabase.auth.signOut()
   }
 
-  const placeholderRows = [
-    [MapPin, 'Saved addresses'],
-    [Truck, 'Pickup preferences'],
-    [WalletCards, 'Payment & wallet'],
-    [ShieldCheck, 'Support'],
-  ]
+
 
   return <>
     <PageTitle eyebrow="YOUR ACCOUNT" title="Profile" body="Your BottleUp account and collection preferences." />
@@ -433,10 +418,9 @@ function ProfileScreen({ profile, email, onSaveName, notify }) {
         <><div className="profileIdentity"><strong>{profile?.full_name || 'Add your name'}</strong><span>{email}</span></div><button className="iconButton" onClick={startEdit} title="Edit name"><Pencil size={16} /></button></>
       )}
     </div>
-    <div className="settingsList">
-      {placeholderRows.map(([Icon, label]) => <div key={label} onClick={() => notify(`${label} is coming soon.`)}><div><Icon size={17} /><span>{label}</span></div><ChevronRight size={17} /></div>)}
-    </div>
-    <button className="secondary" style={{ marginTop: 18 }} onClick={() => supabase.auth.signOut()}>Sign out</button>
+    <section className="dashPanel"><span className="eyebrow">PAYMENT DETAILS</span><h2>Make your account yours.</h2><p>Add or update your bank account securely from your wallet.</p><button className="primary" onClick={() => setScreen('wallet')}>Manage bank details <ArrowRight size={16}/></button></section>
+    <section className="dashPanel dashboardHelp"><h2>A little help along the way</h2><details><summary>When will I receive my points?</summary><p>Points are added after the BottleUp team verifies the collected weight. Each verified kilogram earns 100 points.</p></details><details><summary>What should I prepare for collection?</summary><p>Empty and rinse your plastic, let it dry, then place it in a bag. Add a clear pickup address and a photo when you book.</p></details><details><summary>Can I withdraw cash?</summary><p>Cash withdrawals are not available in the pilot. Bank details can be stored for future payouts. You can request the rewards shown in Rewards.</p></details></section>
+    <button className="secondary" onClick={onExit}>Sign out</button>
 
     <div className="dangerZone">
       {!confirmingDelete ? (
@@ -592,22 +576,28 @@ function AdminScreen({ requests, verify }) {
     <section className="sectionHead"><div><span className="eyebrow">ACTION REQUIRED</span><h2>Verification queue</h2></div><span className="queueCount">{collected.length} waiting</span></section>{collected.length ? <div className="requestList">{collected.map(r => <RequestCard key={r.id} request={r} action={<button className="primary small" onClick={() => verify(r.id)}>Verify + reward</button>} />)}</div> : <EmptyState icon={ShieldCheck} title="Queue is clear" body="Collected pickups will appear here for verification." />}<section className="sectionHead activityHead"><div><span className="eyebrow">RECENT</span><h2>All activity</h2></div></section><div className="requestList">{requests.map(r => <RequestCard key={r.id} request={r} compact />)}</div></>
 }
 
-function AppShell({ onExit, profile, email, userId, onSaveName }) {
+function AppShell({ onExit, profile, email, userId, onSaveName, preview = false }) {
   const realRole = profile?.role || 'user' // source of truth: the profiles table, protected by RLS + a trigger no client can bypass
   const [previewRole, setPreviewRole] = useState(null) // only ever used when realRole === 'admin'
   const role = realRole === 'admin' ? (previewRole || 'admin') : realRole
   const canPreview = realRole === 'admin'
 
   const [screen, setScreen] = useState('home')
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }) }, [screen])
   const [notice, setNotice] = useState('')
-  const { requests, loadingRequests, requestsError, reload } = usePickupRequests(userId)
-  const { notifications, unreadCount, markRead, markAllRead } = useNotifications(userId)
-  const { redemptions, reload: reloadRedemptions } = useRedemptions(userId)
+  const live = usePickupRequests(preview ? null : userId)
+  const { requestsError, reload } = live
+  const requests = preview ? PREVIEW_REQUESTS : live.requests
+  const loadingRequests = preview ? false : live.loadingRequests
+  const [showPickup, setShowPickup] = useState(false)
+  const { notifications, unreadCount, markRead, markAllRead } = useNotifications(preview ? null : userId)
+  const { redemptions, reload: reloadRedemptions } = useRedemptions(preview ? null : userId)
   const [notifOpen, setNotifOpen] = useState(false)
 
   const points = profile?.points || 0
 
   const submitPickup = async ({ type, estimate, location, photo, coords }) => {
+    if (preview || !supabase) return new Error('Preview only. Connect the database to request a pickup. Nothing has been saved.')
     let photo_url = null
     if (photo) {
       // Private bucket + RLS-scoped path (`<user_id>/<file>`). The stored value
@@ -630,16 +620,17 @@ function AppShell({ onExit, profile, email, userId, onSaveName }) {
   const collect = async (id, weight) => { const { error } = await supabase.rpc('collect_pickup', { p_id: id, p_weight: Number(weight) }); setNotice(error ? error.message : 'Collection marked as collected.'); reload() }
   const verify = async id => { const { error } = await supabase.rpc('verify_pickup', { p_id: id }); setNotice(error ? error.message : 'Weight verified and points issued.'); reload() }
   const redeem = async reward => {
+    if (preview || !supabase) { setNotice('Preview only. Connect the database to redeem rewards.'); return }
     const { error } = await supabase.rpc('redeem_reward', { p_reward_name: reward.name, p_cost: reward.cost })
     // profile.points updates on its own via the live subscription in useAuth — no manual refresh needed
-    if (error) setNotice(error.message)
+    if (error) { setNotice(error.message); throw error }
     else { setNotice(`${reward.name} redemption request received.`); reloadRedemptions() }
   }
   const nav = [{ id: 'home', label: 'Home', icon: Home }, { id: 'pickups', label: 'Pickups', icon: Package }, { id: 'rewards', label: 'Rewards', icon: Gift }, { id: 'wallet', label: 'Wallet', icon: WalletCards }, { id: 'profile', label: 'Profile', icon: UserRound }]
 
-  const content = loadingRequests ? null : role === 'collector' ? <CollectorScreen {...{ requests, userId, accept, startOnTheWay, collect }} /> : role === 'admin' ? <AdminScreen {...{ requests, verify }} /> : screen === 'home' ? <UserHome {...{ requests, setScreen, onSubmitPickup: submitPickup, profile, userId }} /> : screen === 'pickups' ? <PickupsScreen requests={requests} userId={userId} /> : screen === 'rewards' ? <RewardsScreen points={points} redeem={redeem} redemptions={redemptions} /> : screen === 'wallet' ? <WalletScreen points={points} redemptions={redemptions} /> : <ProfileScreen profile={profile} email={email} onSaveName={onSaveName} notify={setNotice} />
+  const content = loadingRequests ? null : role === 'collector' ? <CollectorScreen {...{ requests, userId, accept, startOnTheWay, collect }} /> : role === 'admin' ? <AdminScreen {...{ requests, verify }} /> : screen === 'home' ? <DashboardHome {...{ requests, setScreen, profile, userId }} onNew={() => setShowPickup(true)} /> : screen === 'pickups' ? <PickupsScreen requests={requests} userId={userId} onNew={() => setShowPickup(true)} /> : screen === 'rewards' ? <RewardsScreen points={points} redeem={redeem} redemptions={redemptions} /> : screen === 'wallet' ? <WalletScreen points={points} redemptions={redemptions} userId={userId} preview={preview} /> : <ProfileScreen profile={profile} email={email} onSaveName={onSaveName} notify={setNotice} onExit={onExit} setScreen={setScreen} preview={preview} />
 
-  return <>{notifOpen && <div className="notifBackdrop" onClick={() => setNotifOpen(false)} />}<div className="app"><header className="topbar"><div className="topInner"><button className="brand brandButton" onClick={() => { setPreviewRole(null); setScreen('home') }}><Logo /><span>Bottle<span>Up</span></span></button><div className="topActions"><div className="notifWrap"><button className="iconButton" title="Notifications" onClick={() => setNotifOpen(o => !o)}><Bell size={18} />{unreadCount > 0 && <span className="notifDot">{unreadCount > 9 ? '9+' : unreadCount}</span>}</button>{notifOpen && <div className="notifPanel"><div className="notifHead"><strong>Notifications</strong>{unreadCount > 0 && <button onClick={markAllRead}>Mark all read</button>}</div>{notifications.length ? notifications.map(n => <button key={n.id} className={`notifRow ${n.read ? '' : 'unread'}`} onClick={() => markRead(n.id)}><span>{n.message}</span><small>{new Date(n.created_at).toLocaleDateString()}</small></button>) : <div className="notifEmpty">Nothing yet — updates on your pickups will show up here.</div>}</div>}</div><Avatar name={profile?.full_name} email={email} size="sm" /></div></div></header><div className="appBody"><aside className="sidebar"><div className="rolePill"><span>{canPreview && previewRole ? 'PREVIEWING' : 'ACCOUNT'}</span><strong>{role === 'user' ? 'User' : role === 'collector' ? 'Collector' : 'Admin'}</strong></div>{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'navItem active' : 'navItem'} onClick={() => setScreen(id)}><Icon size={18} />{label}</button>)}<div className="sideBottom">{canPreview && <div className="previewSwitch"><span className="previewLabel">PREVIEW AS</span><div className="previewOptions">{['user', 'collector', 'admin'].map(r => <button key={r} className={role === r ? 'active' : ''} onClick={() => setPreviewRole(r === 'admin' ? null : r)}>{r === 'user' ? 'User' : r === 'collector' ? 'Collector' : 'Admin'}</button>)}</div></div>}<button className="navItem" onClick={onExit}><ArrowRight size={18} />Sign out</button></div></aside><main className="main">{notice && <button className="notice" onClick={() => setNotice('')}><Check size={15} />{notice}<X size={14} /></button>}{requestsError && <div className="authMessage authError" style={{ marginBottom: 14 }}>{requestsError}</div>}{content}</main></div><nav className="mobileNav">{role === 'user' ? nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'active' : ''} onClick={() => setScreen(id)}><Icon size={18} /><span>{label}</span></button>) : <>{canPreview && ['user', 'collector', 'admin'].map(r => <button key={r} className={role === r ? 'active' : ''} onClick={() => setPreviewRole(r === 'admin' ? null : r)}><Users size={18} /><span>{r === 'user' ? 'User' : r === 'collector' ? 'Collector' : 'Admin'}</span></button>)}<button onClick={onExit}><ArrowRight size={18} /><span>Sign out</span></button></>}</nav></div></>
+  return <>{notifOpen && <div className="notifBackdrop" onClick={() => setNotifOpen(false)} />}<div className="app dashboard">{preview && <div className="previewBanner">Design preview · Sample data · Changes are not saved <a href="/">Back to website ↗</a></div>}<header className="topbar"><div className="topInner"><button className="brand brandButton" onClick={() => { setPreviewRole(null); setScreen('home') }}><Logo /><span>Bottle<span>Up</span></span></button><div className="topActions"><div className="notifWrap"><button className="iconButton" title="Notifications" onClick={() => setNotifOpen(o => !o)}><Bell size={18} />{unreadCount > 0 && <span className="notifDot">{unreadCount > 9 ? '9+' : unreadCount}</span>}</button>{notifOpen && <div className="notifPanel"><div className="notifHead"><strong>Notifications</strong>{unreadCount > 0 && <button onClick={markAllRead}>Mark all read</button>}</div>{notifications.length ? notifications.map(n => <button key={n.id} className={`notifRow ${n.read ? '' : 'unread'}`} onClick={() => markRead(n.id)}><span>{n.message}</span><small>{new Date(n.created_at).toLocaleDateString()}</small></button>) : <div className="notifEmpty">Nothing yet — updates on your pickups will show up here.</div>}</div>}</div><Avatar name={profile?.full_name} email={email} size="sm" /></div></div></header><div className="appBody"><aside className="sidebar"><div className="rolePill"><span>{canPreview && previewRole ? 'PREVIEWING' : 'ACCOUNT'}</span><strong>{role === 'user' ? 'User' : role === 'collector' ? 'Collector' : 'Admin'}</strong></div>{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'navItem active' : 'navItem'} onClick={() => setScreen(id)}><Icon size={18} />{label}</button>)}<div className="sideBottom">{canPreview && <div className="previewSwitch"><span className="previewLabel">PREVIEW AS</span><div className="previewOptions">{['user', 'collector', 'admin'].map(r => <button key={r} className={role === r ? 'active' : ''} onClick={() => setPreviewRole(r === 'admin' ? null : r)}>{r === 'user' ? 'User' : r === 'collector' ? 'Collector' : 'Admin'}</button>)}</div></div>}<button className="navItem" onClick={onExit}><ArrowRight size={18} />Sign out</button></div></aside><main className="main">{notice && <button className="notice" onClick={() => setNotice('')}><Check size={15} />{notice}<X size={14} /></button>}{requestsError && <div className="authMessage authError" style={{ marginBottom: 14 }}>{requestsError} <button className="secondary" onClick={reload}>Retry</button></div>}{loadingRequests && <p role="status">Loading your dashboard…</p>}{content}{showPickup && <PickupModal onSubmit={submitPickup} close={() => setShowPickup(false)}/>}</main></div><nav className="mobileNav">{role === 'user' ? nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'active' : ''} onClick={() => setScreen(id)}><Icon size={18} /><span>{label}</span></button>) : <>{canPreview && ['user', 'collector', 'admin'].map(r => <button key={r} className={role === r ? 'active' : ''} onClick={() => setPreviewRole(r === 'admin' ? null : r)}><Users size={18} /><span>{r === 'user' ? 'User' : r === 'collector' ? 'Collector' : 'Admin'}</span></button>)}<button onClick={onExit}><ArrowRight size={18} /><span>Sign out</span></button></>}</nav></div></>
 }
 
 function App() {
@@ -660,10 +651,22 @@ function App() {
   const onSaveName = async fullName => {
     if (!fullName) return
     const { error } = await supabase.rpc('update_own_full_name', { p_new_name: fullName })
-    if (!error) refreshProfile()
+    if (error) throw error
+    refreshProfile()
   }
 
   return <AppShell onExit={() => supabase.auth.signOut()} profile={profile} email={session.user.email} userId={session.user.id} onSaveName={onSaveName} />
 }
 
-createRoot(document.getElementById('root')).render(<App />)
+const PREVIEW_REQUESTS = import.meta.env.DEV ? [
+  { id: 'preview-1', user_id: 'preview', material_type: 'PET Bottles', estimated_weight_kg: 3.5, pickup_location: 'Yaba, Lagos', status: 'ACCEPTED', created_at: '2026-09-26T12:00:00Z' },
+  { id: 'preview-2', user_id: 'preview', material_type: 'Plastic Containers', estimated_weight_kg: 5, actual_weight_kg: 5.5, pickup_location: 'Yaba, Lagos', status: 'VERIFIED', created_at: '2026-09-22T12:00:00Z' },
+  { id: 'preview-3', user_id: 'preview', material_type: 'PET Bottles', estimated_weight_kg: 7, actual_weight_kg: 7, pickup_location: 'Yaba, Lagos', status: 'VERIFIED', created_at: '2026-09-18T12:00:00Z' },
+] : []
+function DesignPreview() {
+  const [profile, setProfile] = useState({ full_name: 'Ada Okafor', role: 'user', points: 950 })
+  return <AppShell preview profile={profile} email="ada@example.com" userId="preview" onExit={() => window.location.assign('/')} onSaveName={async full_name => setProfile({ ...profile, full_name })}/>
+}
+const root = import.meta.hot?.data.root || createRoot(document.getElementById('root'))
+if (import.meta.hot) import.meta.hot.data.root = root
+root.render(import.meta.env.DEV && window.location.pathname === '/dashboard-preview' ? <DesignPreview/> : <App />)

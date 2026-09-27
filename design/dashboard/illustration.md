@@ -1,0 +1,4 @@
+# Dashboard illustration
+Generated for BottleUp, September 2026. Final web asset: bottle-up-mvp/public/art/dashboard-community.webp.
+
+Prompt: Wide 3:2 editorial illustration for BottleUp recycling dashboard. Warm flat sage #e5ecd9 background. A joyful Black Nigerian woman with short natural hair in cream shirt and orange trousers carries a reusable forest-green bag full of clean PET bottles along a sunlit courtyard, little plant at right, minimal geometry of doorway. Subject on RIGHT two thirds; generous empty left third for real interface text overlay. Contemporary cut-paper screenprint with fine tactile grain, natural anatomy, tasteful confident shapes, greens #205c42 and #17452f, cream #f7f4ec, tangerine #dc7048, muted blue bottle highlights. Calm premium friendly neighbourhood brand, no text, no logos, no UI, no coins, no watermarks. Match sophisticated hand-painted BottleUp illustrations.
