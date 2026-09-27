@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useState } from "react";
-import { BrandMark } from "./Brand.jsx";
+import { BrandLogo } from "./Brand.jsx";
 import { Icon } from "./Icons.jsx";
 import { supabase } from "../lib/supabase.js";
 import "./auth.css";
@@ -21,10 +21,7 @@ export function AuthLayout({ children, mode = "signin", onBack, onLegal }) {
           disabled={!onBack}
           aria-label="BottleUp home"
         >
-          <BrandMark />
-          <span>
-            bottleup<span>.</span>
-          </span>
+          <BrandLogo light />
         </button>
         <div className="bu-auth-story-copy">
           <span className="bu-auth-eyebrow">

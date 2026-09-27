@@ -36,8 +36,8 @@
   height: 82px;
 }
 .dashboard .topInner {
-  max-width: 1440px;
-  padding: 0 38px;
+  max-width: none;
+  padding: 0 clamp(24px, 2vw, 48px);
 }
 .dashboard .brand {
   font-family: inherit;
@@ -48,8 +48,8 @@
   color: #245c42;
 }
 .dashboard .appBody {
-  max-width: 1440px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   align-items: stretch;
 }
 .dashboard .sidebar {
@@ -86,9 +86,12 @@
   background: #245c42;
 }
 .dashboard .main {
-  max-width: 1180px;
+  flex: 1;
+  width: auto;
+  max-width: none;
   min-width: 0;
-  padding: 28px 38px 60px 24px;
+  margin: 0;
+  padding: 28px clamp(24px, 2vw, 48px) 60px 24px;
 }
 .dashboard .primary {
   border-radius: 100px;
@@ -883,4 +886,36 @@
 }
 .dashboard .requestCard {
   animation: dashEnter 0.35s ease both;
+}
+
+/* Wide desktops use the extra room for a summary column, not empty gutters. */
+@media (min-width: 1600px) {
+  .dashboardPage {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 24px;
+    align-items: stretch;
+  }
+  .dashGreeting,
+  .dashColumns,
+  .dashboardPage > .dashPanel {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+  .dashHero {
+    min-height: 400px;
+  }
+  .dashMetrics {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin: 0;
+  }
+  .dashMetrics > div,
+  .dashMetrics > button {
+    padding: 20px 24px;
+  }
+  .dashMetrics strong {
+    font-size: 32px;
+    margin: 10px 0 7px;
+  }
 }

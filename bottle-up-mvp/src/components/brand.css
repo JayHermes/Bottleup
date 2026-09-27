@@ -1,0 +1,24 @@
+.brandAsset {
+  display: block;
+  width: 166px;
+  height: auto;
+  flex-shrink: 0;
+}
+.brandAsset.brandAssetFull {
+  width: 106px;
+}
+.bu-auth-brand .brandAsset {
+  width: 190px;
+}
+.dashboard .brandButton .brandAsset {
+  width: 166px;
+}
+@media (max-width: 760px) {
+  .brandAsset,
+  .dashboard .brandButton .brandAsset {
+    width: 145px;
+  }
+  .bu-auth-brand .brandAsset {
+    width: 158px;
+  }
+}
