@@ -919,3 +919,8 @@
     margin: 10px 0 7px;
   }
 }
+
+/* The progress card stands alone after removing the repeated pickup promo. */
+.dashboard .dashColumns {
+  grid-template-columns: minmax(0, 1fr);
+}

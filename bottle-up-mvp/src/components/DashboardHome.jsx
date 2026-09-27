@@ -138,22 +138,6 @@ export default function DashboardHome({
             points.
           </div>
         </section>
-        <section className="dashTip">
-          <span className="eyebrow">WE’LL TAKE IT FROM HERE</span>
-          <h2>
-            Gather your plastic.
-            <br />
-            We’ll do the rest.
-          </h2>
-          <p>
-            Keep your plastic together for collection. Our recycling team handles
-            the cleaning, so you don’t have to.
-          </p>
-          <button className="textButton" onClick={onNew}>
-            Schedule a pickup <ArrowRight size={16} />
-          </button>
-          <Leaf size={58} />
-        </section>
       </div>
       <section className="dashPanel">
         <div className="dashSectionTitle">
@@ -202,9 +186,6 @@ export default function DashboardHome({
             <p>
               We’ll keep your pickup updates and verified weights in one place.
             </p>
-            <button className="primary" onClick={onNew}>
-              Book your first pickup
-            </button>
           </div>
         )}
       </section>
