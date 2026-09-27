@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import Brand from "./Brand.jsx";
+import ContactLinks from "./ContactLinks.jsx";
 import { Icon } from "./Icons.jsx";
 import "./landing.css";
 
@@ -463,6 +464,7 @@ export default function Landing({ onAuth, onLegal }) {
             Back to top <Icon name="arrow-up" size={18} />
           </a>
         </div>
+        <div className="bu-footer-contact"><p>Stay in the loop. Need a hand? Say hello.</p><ContactLinks /></div>
         <div className="bu-footer-bottom">
           <span>© {new Date().getFullYear()} BottleUp</span>
           <div>

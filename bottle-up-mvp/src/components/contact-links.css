@@ -1,0 +1,9 @@
+.contactLinks { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.contactLinks a { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; color: inherit; background: rgba(91, 130, 93, .1); text-decoration: none; transition: background-color .18s, transform .18s; }
+.contactLinks a:hover { background: rgba(91, 130, 93, .2); transform: translateY(-2px); }
+.contactLinks a:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
+.bu-footer-contact { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 0 0 28px; color: var(--bu-ink); }
+.bu-footer-contact p { font-size: 13px; }
+.dashboardSupport { margin-top: 24px; }
+.dashboardSupport p { margin-bottom: 14px; }
+@media (prefers-reduced-motion: reduce) { .contactLinks a { transition: none; } .contactLinks a:hover { transform: none; } }

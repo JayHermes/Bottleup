@@ -11,6 +11,7 @@ import DashboardHome from './components/DashboardHome.jsx'
 import BankAccount from './components/BankAccount.jsx'
 import PickupPhoto from './components/PickupPhoto.jsx'
 import PointsHistory from './components/PointsHistory.jsx'
+import ContactLinks from './components/ContactLinks.jsx'
 import Landing from './components/Landing.jsx'
 import { AuthLayout, AuthPanel, ResetPasswordScreen } from './components/AuthPages.jsx'
 import { BrandMark, BrandLogo } from './components/Brand.jsx'
@@ -432,6 +433,7 @@ function ProfileScreen({ profile, email, onSaveName, notify, onExit, setScreen, 
     </div>
     <section className="dashPanel"><span className="eyebrow">PAYMENT DETAILS</span><h2>Make your account yours.</h2><p>Add or update your bank account securely from your wallet.</p><button className="primary" onClick={() => setScreen('wallet')}>Manage bank details <ArrowRight size={16}/></button></section>
     <section className="dashPanel dashboardHelp"><h2>A little help along the way</h2><details><summary>When will I receive my points?</summary><p>Points are added after the BottleUp team verifies the collected weight. Each verified kilogram earns 100 points.</p></details><details><summary>What should I prepare for collection?</summary><p>Keep your plastic together for collection and add a clear pickup address when you book. A photo is optional. Our recycling team handles the cleaning.</p></details><details><summary>Can I withdraw cash?</summary><p>Cash withdrawals are not available in the pilot. Bank details can be stored for future payouts. You can request the rewards shown in Rewards.</p></details></section>
+    <section className="dashPanel dashboardSupport"><span className="eyebrow">SUPPORT & COMMUNITY</span><h2>We’re here to help.</h2><p>Email us for help with your account, pickups or rewards, or find BottleUp on social media.</p><ContactLinks /></section>
     <button className="secondary" onClick={onExit}>Sign out</button>
 
     <div className="dangerZone">
