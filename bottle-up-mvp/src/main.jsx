@@ -10,6 +10,7 @@ import './components/dashboard.css'
 import DashboardHome from './components/DashboardHome.jsx'
 import BankAccount from './components/BankAccount.jsx'
 import PickupPhoto from './components/PickupPhoto.jsx'
+import PointsHistory from './components/PointsHistory.jsx'
 import Landing from './components/Landing.jsx'
 import { AuthLayout, AuthPanel, ResetPasswordScreen } from './components/AuthPages.jsx'
 import { BrandMark, BrandLogo } from './components/Brand.jsx'
@@ -20,6 +21,7 @@ function useAuth() {
   const [session, setSession] = useState(undefined) // undefined = still checking, null = signed out
   const [profile, setProfile] = useState(null)
   const [recovering, setRecovering] = useState(false)
+  const [profileError, setProfileError] = useState('')
 
   useEffect(() => {
     if (!supabase) { setSession(null); return }
@@ -34,27 +36,32 @@ function useAuth() {
   useEffect(() => {
     if (!supabase || !session) { setProfile(null); return }
     let cancelled = false
-    supabase.from('profiles').select('id, full_name, role, points, city').eq('id', session.user.id).single()
-      .then(({ data, error }) => { if (!cancelled) setProfile(error ? null : data) })
+    const load = () => supabase.from('profiles').select('id, full_name, role, points, city').eq('id', session.user.id).single()
+      .then(({ data, error }) => { if (!cancelled) { setProfile(error ? null : data); setProfileError(error ? 'We could not load your balance. Please retry.' : '') } })
+    load()
+    const onVisible = () => { if (document.visibilityState === 'visible') load() }
+    window.addEventListener('focus', load)
+    document.addEventListener('visibilitychange', onVisible)
+    const poll = window.setInterval(onVisible, 30000)
 
     // Live update: if an admin verifies one of my pickups from another device/session,
     // my points here should update without me needing to refresh.
     const channel = supabase
       .channel(`profile-${session.user.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${session.user.id}` },
-        payload => setProfile(payload.new))
-      .subscribe()
+        load)
+      .subscribe(status => { if (status === 'SUBSCRIBED') load() })
 
-    return () => { cancelled = true; supabase.removeChannel(channel) }
+    return () => { cancelled = true; supabase.removeChannel(channel); window.removeEventListener('focus', load); document.removeEventListener('visibilitychange', onVisible); clearInterval(poll) }
   }, [session])
 
   const refreshProfile = () => {
     if (!supabase || !session) return
-    supabase.from('profiles').select('id, full_name, role, points, city').eq('id', session.user.id).single()
-      .then(({ data, error }) => setProfile(error ? null : data))
+    return supabase.from('profiles').select('id, full_name, role, points, city').eq('id', session.user.id).single()
+      .then(({ data, error }) => { setProfile(error ? null : data); setProfileError(error ? 'We could not load your balance. Please retry.' : '') })
   }
 
-  return { session, profile, refreshProfile, loading: session === undefined, recovering, clearRecovering: () => setRecovering(false) }
+  return { session, profile, profileError, refreshProfile, loading: session === undefined, recovering, clearRecovering: () => setRecovering(false) }
 }
 
 function useNotifications(userId) {
@@ -84,21 +91,25 @@ function useNotifications(userId) {
 
 function useRedemptions(userId) {
   const [redemptions, setRedemptions] = useState([])
-  const reload = () => {
+  const [error, setError] = useState('')
+  const reload = async () => {
     if (!supabase || !userId) return
-    supabase.from('reward_redemptions').select('*').eq('user_id', userId).order('created_at', { ascending: false })
-      .then(({ data }) => setRedemptions(data || []))
+    const { data, error } = await supabase.from('reward_redemptions').select('*').eq('user_id', userId).order('created_at', { ascending: false })
+    setError(error ? 'Reward requests could not be refreshed. Pending totals may be out of date.' : '')
+    if (!error) setRedemptions(data)
   }
   useEffect(() => {
     reload()
     if (!supabase || !userId) return
-    const channel = supabase
-      .channel(`redemptions-${userId}`)
+    const channel = supabase.channel(`redemptions-${userId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reward_redemptions', filter: `user_id=eq.${userId}` }, reload)
-      .subscribe()
-    return () => supabase.removeChannel(channel)
+      .subscribe(status => { if (status === 'SUBSCRIBED') reload() })
+    const visible = () => { if (document.visibilityState === 'visible') reload() }
+    window.addEventListener('focus', visible)
+    const poll = setInterval(visible, 30000)
+    return () => { supabase.removeChannel(channel); window.removeEventListener('focus', visible); clearInterval(poll) }
   }, [userId])
-  return { redemptions, reload }
+  return { redemptions, reload, error }
 }
 
 // Straight-line distance in km — good enough to sort "nearest first" without a maps API/key.
@@ -358,7 +369,7 @@ function PickupsScreen({ requests, userId, onNew }) {
     {mine.length ? <div className="requestList">{mine.map(r => <RequestCard key={r.id} request={r} />)}</div> : <EmptyState title="No matching collections" body="Try another filter or book a new pickup." />}</>
 }
 
-function RewardsScreen({ points, redeem, redemptions }) {
+function RewardsScreen({ points, redeem, redemptions, rewards, rewardsError }) {
   const [busy, setBusy] = useState(false)
   const [selected, setSelected] = useState(null)
   const confirmationRef = useRef(null)
@@ -366,10 +377,10 @@ function RewardsScreen({ points, redeem, redemptions }) {
   const [error, setError] = useState('')
   async function confirmReward() {
     setBusy(true); setError('')
-    try { await redeem(selected); setSelected(null) } catch { setError('Could not request this reward. Please retry.') } finally { setBusy(false) }
+    try { await redeem(selected); setSelected(null) } catch (err) { setError(err.message || 'Could not request this reward. Please retry.') } finally { setBusy(false) }
   }
   const pending = redemptions.filter(r => r.status === 'pending')
-  return <><PageTitle eyebrow="YOUR REWARDS" title="Rewards" body="Turn your verified recycling into something useful." /><div className="rewardHero"><div className="rewardBalance"><Coins size={28} /><div><strong>{points.toLocaleString()}</strong><span>available points</span></div></div><span>100 points = 1 kg verified plastic</span></div><div className="sectionHead"><div><span className="eyebrow">MARKETPLACE</span><h2>Redeem your points</h2></div></div><div className="rewardGrid">{REWARDS.map(r => <div className="rewardCard" key={r.name}><div className="rewardIcon"><Gift size={20} /></div><div><strong>{r.name}</strong><p>{r.note}</p></div><div className="rewardCost"><span>{r.cost.toLocaleString()} pts</span><button className="secondary" disabled={busy || points < r.cost} onClick={() => { setSelected(r); setError('') }}>Redeem</button></div></div>)}</div>
+  return <><PageTitle eyebrow="YOUR REWARDS" title="Rewards" body="Turn your verified recycling into something useful." /><div className="rewardHero"><div className="rewardBalance"><Coins size={28} /><div><strong>{points.toLocaleString()}</strong><span>available points</span></div></div><span>100 points = 1 kg verified plastic</span></div><div className="sectionHead"><div><span className="eyebrow">MARKETPLACE</span><h2>Redeem your points</h2></div></div>{rewardsError && <p role="alert">{rewardsError}</p>}<div className="rewardGrid">{rewards.map(r => <div className="rewardCard" key={r.name}><div className="rewardIcon"><Gift size={20} /></div><div><strong>{r.name}</strong><p>{r.note}</p></div><div className="rewardCost"><span>{r.cost.toLocaleString()} pts</span><button className="secondary" disabled={busy || points < r.cost} onClick={() => { setSelected({ ...r, requestKey: crypto.randomUUID() }); setError('') }}>Redeem</button></div></div>)}</div>
     {redemptions.length > 0 && <><div className="sectionHead"><div><span className="eyebrow">HISTORY</span><h2>Your redemptions</h2></div></div><div className="requestList">{redemptions.map(r => <div className="historyRow" key={r.id}><div><strong>{r.reward_name}</strong><span>{r.cost} pts · {new Date(r.created_at).toLocaleDateString()}</span></div><span className={`status ${r.status}`}>{r.status === 'pending' ? 'Pending' : r.status === 'fulfilled' ? 'Fulfilled' : 'Declined — refunded'}</span></div>)}</div></>}
     {selected && <section ref={confirmationRef} className="dashPanel" role="region" aria-label="Confirm reward"><h2>Redeem {selected.name}?</h2><p>This uses {selected.cost} points. The BottleUp team will fulfil the request after it is approved.</p>{error && <p role="alert">{error}</p>}<div className="dashActions"><button className="primary" disabled={busy} onClick={confirmReward}>{busy ? 'Requesting…' : 'Confirm redemption'}</button><button className="secondary" disabled={busy} onClick={() => setSelected(null)}>Cancel</button></div></section>}
     <div className="pilotNote"><ShieldCheck size={17} /><div><strong>Pilot rewards</strong><span>{pending.length > 0 ? `You have ${pending.length} redemption${pending.length > 1 ? 's' : ''} awaiting fulfilment.` : 'Reward fulfilment is handled by the BottleUp team as each partner activates. Your points remain attached to your account.'}</span></div></div></>
@@ -377,7 +388,7 @@ function RewardsScreen({ points, redeem, redemptions }) {
 
 function WalletScreen({ points, redemptions, userId, preview }) {
   const pending = redemptions.filter(r => r.status === 'pending').reduce((a,r) => a + r.cost, 0)
-  return <><PageTitle eyebrow="YOUR BOTTLEUP WALLET" title="A little back. A lot of good." body="Your recycling rewards and bank details, together in one place."/><div className="walletGrid"><div className="walletMain"><span>Available points</span><strong>{points.toLocaleString()}<small> pts</small></strong><small>Earned through verified recycling</small></div><div className="walletStat"><span>Pending rewards</span><strong>{pending.toLocaleString()} pts</strong><p>Awaiting fulfilment</p></div></div><BankAccount userId={userId} preview={preview}/></>
+  return <><PageTitle eyebrow="YOUR BOTTLEUP WALLET" title="A little back. A lot of good." body="Your recycling rewards and bank details, together in one place."/><div className="walletGrid"><div className="walletMain"><span>Available points</span><strong>{points.toLocaleString()}<small> pts</small></strong><small>Earned through verified recycling</small></div><div className="walletStat"><span>Pending rewards</span><strong>{pending.toLocaleString()} pts</strong><p>Awaiting fulfilment</p></div></div><PointsHistory userId={userId} preview={preview}/><BankAccount userId={userId} preview={preview}/></>
 }
 
 function ProfileScreen({ profile, email, onSaveName, notify, onExit, setScreen, preview }) {
@@ -577,8 +588,8 @@ function AdminScreen({ requests, verify }) {
     <section className="sectionHead"><div><span className="eyebrow">ACTION REQUIRED</span><h2>Verification queue</h2></div><span className="queueCount">{collected.length} waiting</span></section>{collected.length ? <div className="requestList">{collected.map(r => <RequestCard key={r.id} request={r} action={<button className="primary small" onClick={() => verify(r.id)}>Verify + reward</button>} />)}</div> : <EmptyState icon={ShieldCheck} title="Queue is clear" body="Collected pickups will appear here for verification." />}<section className="sectionHead activityHead"><div><span className="eyebrow">RECENT</span><h2>All activity</h2></div></section><div className="requestList">{requests.map(r => <RequestCard key={r.id} request={r} compact />)}</div></>
 }
 
-function AppShell({ onExit, profile, email, userId, onSaveName, preview = false }) {
-  const realRole = profile?.role || 'user' // source of truth: the profiles table, protected by RLS + a trigger no client can bypass
+function AppShell({ onExit, profile, email, userId, onSaveName, refreshProfile = async () => {}, preview = false }) {
+  const realRole = profile?.role || 'user' // source of truth: the profiles table, protected by database write privileges and validated commands
   const [previewRole, setPreviewRole] = useState(null) // only ever used when realRole === 'admin'
   const role = realRole === 'admin' ? (previewRole || 'admin') : realRole
   const canPreview = realRole === 'admin'
@@ -592,10 +603,16 @@ function AppShell({ onExit, profile, email, userId, onSaveName, preview = false 
   const loadingRequests = preview ? false : live.loadingRequests
   const [showPickup, setShowPickup] = useState(false)
   const { notifications, unreadCount, markRead, markAllRead } = useNotifications(preview ? null : userId)
-  const { redemptions, reload: reloadRedemptions } = useRedemptions(preview ? null : userId)
+  const { redemptions, reload: reloadRedemptions, error: redemptionsError } = useRedemptions(preview ? null : userId)
   const [notifOpen, setNotifOpen] = useState(false)
 
-  const points = profile?.points || 0
+  const points = profile.points
+  const [rewards, setRewards] = useState(preview ? REWARDS : [])
+  const [rewardsError, setRewardsError] = useState('')
+  useEffect(() => {
+    if (preview || !supabase) return
+    supabase.from('reward_catalog').select('id,name,cost,note').eq('active', true).order('cost').then(({data,error}) => { setRewards(data || []); setRewardsError(error ? 'Rewards are unavailable. Please reload to try again.' : '') })
+  }, [preview])
 
   const submitPickup = async ({ type, estimate, location, photo, coords }) => {
     if (preview || !supabase) return new Error('Preview only. Connect the database to request a pickup. Nothing has been saved.')
@@ -625,21 +642,24 @@ function AppShell({ onExit, profile, email, userId, onSaveName, preview = false 
   const collect = async (id, weight) => { const { error } = await supabase.rpc('collect_pickup', { p_id: id, p_weight: Number(weight) }); setNotice(error ? error.message : 'Collection marked as collected.'); reload() }
   const verify = async id => { const { error } = await supabase.rpc('verify_pickup', { p_id: id }); setNotice(error ? error.message : 'Weight verified and points issued.'); reload() }
   const redeem = async reward => {
-    if (preview || !supabase) { setNotice('Preview only. Connect the database to redeem rewards.'); return }
-    const { error } = await supabase.rpc('redeem_reward', { p_reward_name: reward.name, p_cost: reward.cost })
-    // profile.points updates on its own via the live subscription in useAuth — no manual refresh needed
+    if (preview || !supabase) throw new Error('Preview only. No reward has been requested.')
+    const storageKey = `bottleup-reward:${userId}:${reward.id}`
+    let requestKey = reward.requestKey
+    try { requestKey = sessionStorage.getItem(storageKey) || requestKey; sessionStorage.setItem(storageKey, requestKey) } catch { /* The in-memory key still protects retries when storage is disabled. */ }
+    const { error } = await supabase.rpc('request_reward', { p_reward_id: reward.id, p_request_key: requestKey })
+    // Explicit reload covers delayed or disconnected realtime subscriptions.
     if (error) { setNotice(error.message); throw error }
-    else { setNotice(`${reward.name} redemption request received.`); reloadRedemptions() }
+    else { try { sessionStorage.removeItem(storageKey) } catch {} setNotice(`${reward.name} redemption request received.`); reloadRedemptions(); await refreshProfile() }
   }
   const nav = [{ id: 'home', label: 'Home', icon: Home }, { id: 'pickups', label: 'Pickups', icon: Package }, { id: 'rewards', label: 'Rewards', icon: Gift }, { id: 'wallet', label: 'Wallet', icon: WalletCards }, { id: 'profile', label: 'Profile', icon: UserRound }]
 
-  const content = loadingRequests ? null : role === 'collector' ? <CollectorScreen {...{ requests, userId, accept, startOnTheWay, collect }} /> : role === 'admin' ? <AdminScreen {...{ requests, verify }} /> : screen === 'home' ? <DashboardHome {...{ requests, setScreen, profile, userId }} onNew={() => setShowPickup(true)} /> : screen === 'pickups' ? <PickupsScreen requests={requests} userId={userId} onNew={() => setShowPickup(true)} /> : screen === 'rewards' ? <RewardsScreen points={points} redeem={redeem} redemptions={redemptions} /> : screen === 'wallet' ? <WalletScreen points={points} redemptions={redemptions} userId={userId} preview={preview} /> : <ProfileScreen profile={profile} email={email} onSaveName={onSaveName} notify={setNotice} onExit={onExit} setScreen={setScreen} preview={preview} />
+  const content = loadingRequests ? null : role === 'collector' ? <CollectorScreen {...{ requests, userId, accept, startOnTheWay, collect }} /> : role === 'admin' ? <AdminScreen {...{ requests, verify }} /> : screen === 'home' ? <DashboardHome {...{ requests, setScreen, profile, userId }} onNew={() => setShowPickup(true)} /> : screen === 'pickups' ? <PickupsScreen requests={requests} userId={userId} onNew={() => setShowPickup(true)} /> : screen === 'rewards' ? <RewardsScreen points={points} redeem={redeem} redemptions={redemptions} rewards={rewards} rewardsError={rewardsError} /> : screen === 'wallet' ? <WalletScreen points={points} redemptions={redemptions} userId={userId} preview={preview} /> : <ProfileScreen profile={profile} email={email} onSaveName={onSaveName} notify={setNotice} onExit={onExit} setScreen={setScreen} preview={preview} />
 
-  return <>{notifOpen && <div className="notifBackdrop" onClick={() => setNotifOpen(false)} />}<div className="app dashboard">{preview && <div className="previewBanner">Design preview · Sample data · Changes are not saved <a href="/">Back to website ↗</a></div>}<header className="topbar"><div className="topInner"><button className="brand brandButton" onClick={() => { setPreviewRole(null); setScreen('home') }}><BrandLogo /></button><div className="topActions"><div className="notifWrap"><button className="iconButton" title="Notifications" onClick={() => setNotifOpen(o => !o)}><Bell size={18} />{unreadCount > 0 && <span className="notifDot">{unreadCount > 9 ? '9+' : unreadCount}</span>}</button>{notifOpen && <div className="notifPanel"><div className="notifHead"><strong>Notifications</strong>{unreadCount > 0 && <button onClick={markAllRead}>Mark all read</button>}</div>{notifications.length ? notifications.map(n => <button key={n.id} className={`notifRow ${n.read ? '' : 'unread'}`} onClick={() => markRead(n.id)}><span>{n.message}</span><small>{new Date(n.created_at).toLocaleDateString()}</small></button>) : <div className="notifEmpty">Nothing yet — updates on your pickups will show up here.</div>}</div>}</div><Avatar name={profile?.full_name} email={email} size="sm" /></div></div></header><div className="appBody"><aside className="sidebar"><div className="rolePill"><span>{canPreview && previewRole ? 'PREVIEWING' : 'ACCOUNT'}</span><strong>{role === 'user' ? 'User' : role === 'collector' ? 'Collector' : 'Admin'}</strong></div>{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'navItem active' : 'navItem'} onClick={() => setScreen(id)}><Icon size={18} />{label}</button>)}<div className="sideBottom">{canPreview && <div className="previewSwitch"><span className="previewLabel">PREVIEW AS</span><div className="previewOptions">{['user', 'collector', 'admin'].map(r => <button key={r} className={role === r ? 'active' : ''} onClick={() => setPreviewRole(r === 'admin' ? null : r)}>{r === 'user' ? 'User' : r === 'collector' ? 'Collector' : 'Admin'}</button>)}</div></div>}<button className="navItem" onClick={onExit}><ArrowRight size={18} />Sign out</button></div></aside><main className="main">{notice && <button className="notice" onClick={() => setNotice('')}><Check size={15} />{notice}<X size={14} /></button>}{requestsError && <div className="authMessage authError" style={{ marginBottom: 14 }}>{requestsError} <button className="secondary" onClick={reload}>Retry</button></div>}{loadingRequests && <p role="status">Loading your dashboard…</p>}{content}{showPickup && <PickupModal onSubmit={submitPickup} close={() => setShowPickup(false)}/>}</main></div><nav className="mobileNav">{role === 'user' ? nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'active' : ''} onClick={() => setScreen(id)}><Icon size={18} /><span>{label}</span></button>) : <>{canPreview && ['user', 'collector', 'admin'].map(r => <button key={r} className={role === r ? 'active' : ''} onClick={() => setPreviewRole(r === 'admin' ? null : r)}><Users size={18} /><span>{r === 'user' ? 'User' : r === 'collector' ? 'Collector' : 'Admin'}</span></button>)}<button onClick={onExit}><ArrowRight size={18} /><span>Sign out</span></button></>}</nav></div></>
+  return <>{notifOpen && <div className="notifBackdrop" onClick={() => setNotifOpen(false)} />}<div className="app dashboard">{preview && <div className="previewBanner">Design preview · Sample data · Changes are not saved <a href="/">Back to website ↗</a></div>}<header className="topbar"><div className="topInner"><button className="brand brandButton" onClick={() => { setPreviewRole(null); setScreen('home') }}><BrandLogo /></button><div className="topActions"><div className="notifWrap"><button className="iconButton" title="Notifications" onClick={() => setNotifOpen(o => !o)}><Bell size={18} />{unreadCount > 0 && <span className="notifDot">{unreadCount > 9 ? '9+' : unreadCount}</span>}</button>{notifOpen && <div className="notifPanel"><div className="notifHead"><strong>Notifications</strong>{unreadCount > 0 && <button onClick={markAllRead}>Mark all read</button>}</div>{notifications.length ? notifications.map(n => <button key={n.id} className={`notifRow ${n.read ? '' : 'unread'}`} onClick={() => markRead(n.id)}><span>{n.message}</span><small>{new Date(n.created_at).toLocaleDateString()}</small></button>) : <div className="notifEmpty">Nothing yet — updates on your pickups will show up here.</div>}</div>}</div><Avatar name={profile?.full_name} email={email} size="sm" /></div></div></header><div className="appBody"><aside className="sidebar"><div className="rolePill"><span>{canPreview && previewRole ? 'PREVIEWING' : 'ACCOUNT'}</span><strong>{role === 'user' ? 'User' : role === 'collector' ? 'Collector' : 'Admin'}</strong></div>{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'navItem active' : 'navItem'} onClick={() => setScreen(id)}><Icon size={18} />{label}</button>)}<div className="sideBottom">{canPreview && <div className="previewSwitch"><span className="previewLabel">PREVIEW AS</span><div className="previewOptions">{['user', 'collector', 'admin'].map(r => <button key={r} className={role === r ? 'active' : ''} onClick={() => setPreviewRole(r === 'admin' ? null : r)}>{r === 'user' ? 'User' : r === 'collector' ? 'Collector' : 'Admin'}</button>)}</div></div>}<button className="navItem" onClick={onExit}><ArrowRight size={18} />Sign out</button></div></aside><main className="main">{notice && <button className="notice" onClick={() => setNotice('')}><Check size={15} />{notice}<X size={14} /></button>}{redemptionsError && <p role="alert">{redemptionsError} <button className="secondary" onClick={reloadRedemptions}>Retry</button></p>}{requestsError && <div className="authMessage authError" style={{ marginBottom: 14 }}>{requestsError} <button className="secondary" onClick={reload}>Retry</button></div>}{loadingRequests && <p role="status">Loading your dashboard…</p>}{content}{showPickup && <PickupModal onSubmit={submitPickup} close={() => setShowPickup(false)}/>}</main></div><nav className="mobileNav">{role === 'user' ? nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'active' : ''} onClick={() => setScreen(id)}><Icon size={18} /><span>{label}</span></button>) : <>{canPreview && ['user', 'collector', 'admin'].map(r => <button key={r} className={role === r ? 'active' : ''} onClick={() => setPreviewRole(r === 'admin' ? null : r)}><Users size={18} /><span>{r === 'user' ? 'User' : r === 'collector' ? 'Collector' : 'Admin'}</span></button>)}<button onClick={onExit}><ArrowRight size={18} /><span>Sign out</span></button></>}</nav></div></>
 }
 
 function App() {
-  const { session, profile, refreshProfile, loading, recovering, clearRecovering } = useAuth()
+  const { session, profile, profileError, refreshProfile, loading, recovering, clearRecovering } = useAuth()
   const [authMode, setAuthMode] = useState(null)
   const [legalPage, setLegalPage] = useState(null)
 
@@ -653,6 +673,8 @@ function App() {
       : <Landing onAuth={setAuthMode} onLegal={setLegalPage} />
   }
 
+  if (!profile) return <main className="dashPanel" style={{ margin: 32 }}><p role={profileError ? "alert" : "status"}>{profileError || "Loading your account and balance…"}</p><button className="secondary" onClick={refreshProfile}>Retry</button><button className="secondary" onClick={() => supabase.auth.signOut()}>Sign out</button></main>
+
   const onSaveName = async fullName => {
     if (!fullName) return
     const { error } = await supabase.rpc('update_own_full_name', { p_new_name: fullName })
@@ -660,7 +682,7 @@ function App() {
     refreshProfile()
   }
 
-  return <AppShell onExit={() => supabase.auth.signOut()} profile={profile} email={session.user.email} userId={session.user.id} onSaveName={onSaveName} />
+  return <AppShell onExit={() => supabase.auth.signOut()} profile={profile} email={session.user.email} userId={session.user.id} onSaveName={onSaveName} refreshProfile={refreshProfile} />
 }
 
 const PREVIEW_REQUESTS = import.meta.env.DEV ? [

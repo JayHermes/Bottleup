@@ -3,7 +3,7 @@
 ## Outcome
 A user can list their own pickups, see an accurate balance, earn points exactly once after an admin verifies collected weight, redeem only valid rewards, and receive balance updates without a page reload. Users cannot read another user's private records, change roles, manufacture points, or spend the same balance twice.
 
-This is an implementation ticket, not a claim that the backend is ready. No backend changes are authorized by this ticket alone. The immediate request is documentation; implementation remains pending.
+Implementation was explicitly authorized on 28 September 2026. The points migration is now applied to BottleUP. See [implementation and verification evidence](../points-system.md) for the delivered scope, tests and operational limits. The audit below records the pre-migration state.
 
 ## Confirmed live state (28 September 2026)
 Project: BottleUP, `sdubpqggmhadoqmjrgaf`.

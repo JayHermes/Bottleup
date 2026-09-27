@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test tests/bank-accounts.test.mjs tests/pickup-photo-storage.test.mjs tests/points.test.mjs",
+    "test:concurrency": "POINTS_CONCURRENCY=1 node --test tests/points-concurrency.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
@@ -15,6 +17,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@vitejs/plugin-react": "^4.3.4",
     "vite": "^5.4.11"
   }

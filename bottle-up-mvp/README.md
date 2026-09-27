@@ -1,30 +1,20 @@
-# Bottle Up MVP
+# BottleUp
 
-A mobile-friendly MVP for coordinating plastic pickup, collector fulfillment, recycling verification, and user rewards.
+React + Supabase app for plastic pickups, collector fulfilment, admin verification and recycling rewards.
 
-## Included
-- User pickup request flow
-- Collector acceptance + collection flow
-- Admin verification + reward flow
-- Responsive UI
-- Supabase-ready database schema
-- Mock data so the interface works before backend connection
+## Development
 
-## Run locally
-```bash
+```sh
 npm install
 npm run dev
+npm test
+npm run build
 ```
 
-## Connect Supabase
-1. Create a Supabase project.
-2. Run `supabase/schema.sql` in the SQL editor.
-3. Copy `.env.example` to `.env`.
-4. Add your project URL and anon key.
-5. Replace the temporary in-memory request state in `src/main.jsx` with Supabase queries.
+Set the Supabase URL and publishable/anon key using `.env.example`. Never put a service-role key in frontend environment variables. `/dashboard-preview` is a development-only design preview; its sample data is not a working account.
 
-## Current reward assumption
-The demo awards **100 points per verified kilogram**. This is deliberately a placeholder; the business model should determine the final conversion and redemption value.
+## Database
 
-## Next engineering milestone
-Wire the UI to Supabase Auth + database, add image upload, map/location selection, and role-based access policies for collectors/admins.
+Production BottleUP already has the points migration. Do not run the bootstrap schema against production. For a new, empty Supabase project, run `supabase/schema.sql` in the SQL editor; it includes private photo storage, bank-detail ownership policies and the points ledger.
+
+See [points architecture, research and verification](../docs/points-system.md). The system credits 100 points per admin-verified kilogram, reads reward prices from the server, prevents double spending/repeated credits, refunds rejected rewards once, and displays balance/history. Reward fulfilment remains a manual team operation; cash payouts are not implemented.
