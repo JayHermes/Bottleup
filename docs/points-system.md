@@ -6,7 +6,7 @@ Implemented 28 September 2026 in BottleUP (`sdubpqggmhadoqmjrgaf`). Supabase ass
 
 - 100 integer points per verified kilogram, preserving the existing product rate. Collectors record 0.01–20,000 kg with at most two decimals; only admins verify. Estimates never earn points.
 - Verification credits a pickup once. The original weight and rate are recorded alongside the credit.
-- The database owns reward prices and availability. The existing catalog remains Free Pickup / 300 points, ₦1,000 Airtime / 500 points, and ₦2,000 Shopping Voucher / 1,000 points. These are existing business choices, not claims that research validated their profitability.
+- The database owns reward prices and availability. The existing catalog remains ₦500 Airtime / 300 points, ₦1,000 Airtime / 500 points, and ₦2,000 Shopping Voucher / 1,000 points. These are existing business choices, not claims that research validated their profitability.
 - Redemption reserves points immediately. Fulfilment does not debit again; rejection refunds once. Decisions are terminal. Fulfilment is manual, not an airtime or bank payout integration.
 - Points have no cash-withdrawal facility. No expiry or automatic promotional grants were introduced.
 

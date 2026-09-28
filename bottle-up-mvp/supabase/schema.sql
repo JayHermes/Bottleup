@@ -355,7 +355,7 @@ create table public.reward_catalog (
   note text not null, active boolean not null default true
 );
 insert into public.reward_catalog(id,name,cost,note) values
- ('free-pickup','Free Pickup',300,'One scheduled pickup'),
+ ('free-pickup','₦500 Airtime',300,'Mobile airtime reward'),
  ('airtime-1000','₦1,000 Airtime',500,'Mobile airtime reward'),
  ('voucher-2000','₦2,000 Shopping Voucher',1000,'Partner voucher');
 alter table public.reward_catalog enable row level security;

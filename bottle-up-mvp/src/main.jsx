@@ -176,7 +176,7 @@ const STATUS_LABEL = { AVAILABLE: 'Awaiting collector', ACCEPTED: 'Collector ass
 const POINTS_PER_KG = 100
 const PHOTO_BUCKET = 'pickup-photos'
 const REWARDS = [
-  { name: 'Free Pickup', cost: 300, note: 'One scheduled pickup' },
+  { name: '₦500 Airtime', cost: 300, note: 'Mobile airtime reward' },
   { name: '₦1,000 Airtime', cost: 500, note: 'Mobile airtime reward' },
   { name: '₦2,000 Shopping Voucher', cost: 1000, note: 'Partner voucher' },
 ]
