@@ -1,6 +1,6 @@
 $schema: https://api.gitbook.com/gitbook-docs.yaml
 site:
-  title: BOTTLE UP Docs
+  title: BOTTLE UP
   structure:
     - type: section
       key: section-1
