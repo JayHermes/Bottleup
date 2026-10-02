@@ -4,13 +4,14 @@ site:
   structure:
     - type: section
       key: section-1
-      title: BOTTLE UP Docs
+      title: BOTTLE UP
       path: bottle-up-docs
+      description: ""
       default: true
       children:
         - type: space
           key: space-1
-          title: Untitled
+          title: BOTTLE UP
           path: untitled
           default: true
           content:
