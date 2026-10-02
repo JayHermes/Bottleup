@@ -33,7 +33,7 @@ layout:
 
 **A plastic collection, recovery and rewards platform**
 
-Website: https://www.usebottleup.xyz\
+Website: [https://www.usebottleup.xyz](https://www.usebottleup.xyz/)\
 \
 **September 2026**
 
