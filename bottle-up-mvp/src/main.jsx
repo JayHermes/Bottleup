@@ -170,10 +170,12 @@ function usePickupRequests(userId) {
 }
 
 const PLASTIC_TYPES = ['PET Bottles', 'Plastic Containers', 'HDPE Plastic', 'Mixed Plastic']
+const BOTTLES_PER_KG = 50 // what someone types in the pickup form; storage and every backend calculation stay in kg
 const STAGES = ['Submitted', 'Accepted', 'On the way', 'Collected', 'Verified']
 const STATUS_TO_STAGE = { AVAILABLE: 0, ACCEPTED: 1, ON_THE_WAY: 2, COLLECTED: 3, VERIFIED: 4 }
 const STATUS_LABEL = { AVAILABLE: 'Awaiting collector', ACCEPTED: 'Collector assigned', ON_THE_WAY: 'On the way', COLLECTED: 'Collected', VERIFIED: 'Verified', DELIVERED: 'Delivered for verification', CANCELLED: 'Cancelled' }
-const POINTS_PER_KG = 100
+const POINTS_PER_KG = 70 // what the requester earns per verified kg — must match bottleup_private.pickup_rate() in the database
+const COLLECTOR_RATE_PER_KG = 25 // what the collector earns per verified kg (when one is assigned) — must match bottleup_private.collector_rate()
 const PHOTO_BUCKET = 'pickup-photos'
 const REWARDS = [
   { name: '₦500 Airtime', cost: 300, note: 'Mobile airtime reward' },
@@ -244,7 +246,7 @@ function LegalScreen({ page, onBack }) {
     <h2>Collectors</h2>
     <p>Becoming a collector requires applying through signup and being approved by BottleUp. Approval isn't automatic, and BottleUp may decline or revoke collector status at its discretion.</p>
     <h2>Points and rewards</h2>
-    <p>Points are earned at a fixed rate (1 kg of verified plastic = 100 points) and have no cash value. Rewards shown in the app may be limited by partner availability and are not guaranteed to be redeemable at all times. BottleUp Wallet is a reward balance, not a cash account — there is no cash withdrawal.</p>
+    <p>Points are earned at a fixed rate (1 kg of verified plastic = {POINTS_PER_KG} points) and have no cash value. Rewards shown in the app may be limited by partner availability and are not guaranteed to be redeemable at all times. BottleUp Wallet is a reward balance, not a cash account — there is no cash withdrawal.</p>
     <h2>Conduct</h2>
     <p>Don't misrepresent the material or weight of a pickup, and don't attempt to circumvent the verification process. Accounts found doing so may be suspended.</p>
     <h2>Changes</h2>
@@ -261,9 +263,9 @@ function StageTracker({ status }) {
 
 function Stat({ icon: Icon, value, label }) { return <div className="miniStat"><div className="miniIcon"><Icon size={16} /></div><strong>{value}</strong><span>{label}</span></div> }
 
-function RequestCard({ request, action, compact = false, distanceKm }) {
+function RequestCard({ request, action, compact = false, distanceKm, pointsRate = POINTS_PER_KG }) {
   const weight = request.actual_weight_kg || request.estimated_weight_kg
-  const earnedPoints = request.status === 'VERIFIED' ? Math.round((request.actual_weight_kg || 0) * POINTS_PER_KG) : 0
+  const earnedPoints = request.status === 'VERIFIED' ? Math.round((request.actual_weight_kg || 0) * pointsRate) : 0
   return <article className={`requestCard ${compact ? 'compact' : ''}`}><div className="requestTop"><div className="requestIcon"><Package size={18} /></div><div className="requestMain"><div className="requestTitle">{request.material_type}</div><div className="requestMeta"><span>{request.id.slice(0, 8)}</span><span><MapPin size={12} />{request.pickup_location}</span><span><Weight size={12} />{weight} kg</span>{distanceKm != null && <span className="distanceBadge">{distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` : `${distanceKm.toFixed(1)} km`} away</span>}</div></div><span className={`status ${request.status.toLowerCase()}`}>{STATUS_LABEL[request.status]}</span></div><StageTracker status={request.status} /><PickupPhoto path={request.photo_url} />{(earnedPoints > 0 || action) && <div className="requestBottom">{earnedPoints > 0 ? <span className="points"><Coins size={14} />+{earnedPoints} points</span> : <span />}{action}</div>}</article>
 }
 
@@ -310,11 +312,15 @@ function PickupModal({ onSubmit, close }) {
     if (!estimate || !location) return
     setBusy(true)
     setError('')
+    // The person counts bottles (what they can actually see in front of them);
+    // storage and every downstream calculation still work in kg, so convert
+    // here, at the one place bottles become a number anyone typed in.
+    const estimateKg = Number(estimate) / BOTTLES_PER_KG
     // If they didn't tap "use my location," fall back to converting what they
     // typed into coordinates, so distance-sorting still works for this pickup.
     try {
       const finalCoords = coords || await geocode(`${location}, Nigeria`)
-      const err = await onSubmit({ type, estimate, location, photo, coords: finalCoords })
+      const err = await onSubmit({ type, estimate: estimateKg, location, photo, coords: finalCoords })
       if (err) setError(err.message || 'Could not submit this request. Please try again.')
       else close()
     } catch { setError('Could not submit this request. Please try again.') } finally { setBusy(false) }
@@ -332,7 +338,8 @@ function PickupModal({ onSubmit, close }) {
 
     <form id="pickupForm" className="pickupForm" onSubmit={submit}>
       <label>What are you recycling?<select value={type} onChange={e => setType(e.target.value)}>{PLASTIC_TYPES.map(t => <option key={t}>{t}</option>)}</select></label>
-      <label>Estimated weight<input required type="number" min="0.1" step="0.1" value={estimate} onChange={e => setEstimate(e.target.value)} placeholder="e.g. 5 kg" /></label>
+      <label>Approximate number of bottles<input required type="number" min="1" step="1" value={estimate} onChange={e => setEstimate(e.target.value)} placeholder="e.g. 40 bottles" /></label>
+      <p className="fieldHint">About {BOTTLES_PER_KG} bottles ≈ 1 kg. Your final reward is based on the actual weight collectors verify.</p>
       <label>Pickup location<div className="inputWithIcon"><MapPin size={16} /><input required value={location} onChange={e => setLocation(e.target.value)} placeholder="Area or landmark" /></div></label>
       <button type="button" className="locateButton" onClick={useMyLocation} disabled={locating}>
         {coords ? <><Check size={14} />Precise location captured</> : locating ? 'Getting your location…' : <><MapPin size={14} />Add my precise location <span>(optional, helps collectors find you)</span></>}
@@ -381,7 +388,7 @@ function RewardsScreen({ points, redeem, redemptions, rewards, rewardsError }) {
     try { await redeem(selected); setSelected(null) } catch (err) { setError(err.message || 'Could not request this reward. Please retry.') } finally { setBusy(false) }
   }
   const pending = redemptions.filter(r => r.status === 'pending')
-  return <><PageTitle eyebrow="YOUR REWARDS" title="Rewards" body="Turn your verified recycling into something useful." /><div className="rewardHero"><div className="rewardBalance"><Coins size={28} /><div><strong>{points.toLocaleString()}</strong><span>available points</span></div></div><span>100 points = 1 kg verified plastic</span></div><div className="sectionHead"><div><span className="eyebrow">MARKETPLACE</span><h2>Redeem your points</h2></div></div>{rewardsError && <p role="alert">{rewardsError}</p>}<div className="rewardGrid">{rewards.map(r => <div className="rewardCard" key={r.name}><div className="rewardIcon"><Gift size={20} /></div><div><strong>{r.name}</strong><p>{r.note}</p></div><div className="rewardCost"><span>{r.cost.toLocaleString()} pts</span><button className="secondary" disabled={busy || points < r.cost} onClick={() => { setSelected({ ...r, requestKey: crypto.randomUUID() }); setError('') }}>Redeem</button></div></div>)}</div>
+  return <><PageTitle eyebrow="YOUR REWARDS" title="Rewards" body="Turn your verified recycling into something useful." /><div className="rewardHero"><div className="rewardBalance"><Coins size={28} /><div><strong>{points.toLocaleString()}</strong><span>available points</span></div></div><span>{POINTS_PER_KG} points = 1 kg verified plastic</span></div><div className="sectionHead"><div><span className="eyebrow">MARKETPLACE</span><h2>Redeem your points</h2></div></div>{rewardsError && <p role="alert">{rewardsError}</p>}<div className="rewardGrid">{rewards.map(r => <div className="rewardCard" key={r.name}><div className="rewardIcon"><Gift size={20} /></div><div><strong>{r.name}</strong><p>{r.note}</p></div><div className="rewardCost"><span>{r.cost.toLocaleString()} pts</span><button className="secondary" disabled={busy || points < r.cost} onClick={() => { setSelected({ ...r, requestKey: crypto.randomUUID() }); setError('') }}>Redeem</button></div></div>)}</div>
     {redemptions.length > 0 && <><div className="sectionHead"><div><span className="eyebrow">HISTORY</span><h2>Your redemptions</h2></div></div><div className="requestList">{redemptions.map(r => <div className="historyRow" key={r.id}><div><strong>{r.reward_name}</strong><span>{r.cost} pts · {new Date(r.created_at).toLocaleDateString()}</span></div><span className={`status ${r.status}`}>{r.status === 'pending' ? 'Pending' : r.status === 'fulfilled' ? 'Fulfilled' : 'Declined — refunded'}</span></div>)}</div></>}
     {selected && <section ref={confirmationRef} className="dashPanel" role="region" aria-label="Confirm reward"><h2>Redeem {selected.name}?</h2><p>This uses {selected.cost} points. The BottleUp team will fulfil the request after it is approved.</p>{error && <p role="alert">{error}</p>}<div className="dashActions"><button className="primary" disabled={busy} onClick={confirmReward}>{busy ? 'Requesting…' : 'Confirm redemption'}</button><button className="secondary" disabled={busy} onClick={() => setSelected(null)}>Cancel</button></div></section>}
     <div className="pilotNote"><ShieldCheck size={17} /><div><strong>Pilot rewards</strong><span>{pending.length > 0 ? `You have ${pending.length} redemption${pending.length > 1 ? 's' : ''} awaiting fulfilment.` : 'Reward fulfilment is handled by the BottleUp team as each partner activates. Your points remain attached to your account.'}</span></div></div></>
@@ -432,7 +439,7 @@ function ProfileScreen({ profile, email, onSaveName, notify, onExit, setScreen, 
       )}
     </div>
     <section className="dashPanel"><span className="eyebrow">PAYMENT DETAILS</span><h2>Make your account yours.</h2><p>Add or update your bank account securely from your wallet.</p><button className="primary" onClick={() => setScreen('wallet')}>Manage bank details <ArrowRight size={16}/></button></section>
-    <section className="dashPanel dashboardHelp"><h2>A little help along the way</h2><details><summary>When will I receive my points?</summary><p>Points are added after the BottleUp team verifies the collected weight. Each verified kilogram earns 100 points.</p></details><details><summary>What should I prepare for collection?</summary><p>Keep your plastic together for collection and add a clear pickup address when you book. A photo is optional. Our recycling team handles the cleaning.</p></details><details><summary>Can I withdraw cash?</summary><p>Cash withdrawals are not available in the pilot. Bank details can be stored for future payouts. You can request the rewards shown in Rewards.</p></details></section>
+    <section className="dashPanel dashboardHelp"><h2>A little help along the way</h2><details><summary>When will I receive my points?</summary><p>Points are added after the BottleUp team verifies the collected weight. Each verified kilogram earns {POINTS_PER_KG} points.</p></details><details><summary>What should I prepare for collection?</summary><p>Keep your plastic together for collection and add a clear pickup address when you book. A photo is optional. Our recycling team handles the cleaning.</p></details><details><summary>Can I withdraw cash?</summary><p>Cash withdrawals are not available in the pilot. Bank details can be stored for future payouts. You can request the rewards shown in Rewards.</p></details></section>
     <section className="dashPanel dashboardSupport"><span className="eyebrow">SUPPORT & COMMUNITY</span><h2>We’re here to help.</h2><p>Email us for help with your account, pickups or rewards, or find BottleUp on social media.</p><ContactLinks /></section>
     <button className="secondary" onClick={onExit}>Sign out</button>
 
@@ -488,7 +495,9 @@ function CollectorScreen({ requests, userId, accept, startOnTheWay, collect }) {
     .sort((a, b) => (a.d ?? Infinity) - (b.d ?? Infinity))
     .map(x => x.r)
   const mine = requests.filter(r => r.collector_id === userId && r.status !== 'VERIFIED')
-  const kg = requests.filter(r => r.collector_id === userId && r.status === 'VERIFIED').reduce((a, r) => a + (r.actual_weight_kg || 0), 0)
+  const completed = requests.filter(r => r.collector_id === userId && r.status === 'VERIFIED')
+  const kg = completed.reduce((a, r) => a + (r.actual_weight_kg || 0), 0)
+  const myPoints = Math.round(kg * COLLECTOR_RATE_PER_KG)
 
   const actionFor = r => {
     if (r.status === 'AVAILABLE') return <button className="primary small" onClick={() => accept(r.id, myPos)}>Accept pickup</button>
@@ -497,16 +506,17 @@ function CollectorScreen({ requests, userId, accept, startOnTheWay, collect }) {
     return null
   }
 
-  return <><PageTitle eyebrow="COLLECTOR MODE" title="Today's pickups" body={myPos ? "Sorted by distance from your current location." : "Accept nearby requests and keep every collection moving."} /><section className="collectorSummary"><Stat icon={Package} value={available.length} label="Available" /><Stat icon={Truck} value={mine.length} label="My pickups" /><Stat icon={Recycle} value={`${kg.toFixed(1)} kg`} label="Verified total" /></section>
+  return <><PageTitle eyebrow="COLLECTOR MODE" title="Today's pickups" body={myPos ? "Sorted by distance from your current location." : "Accept nearby requests and keep every collection moving."} /><section className="collectorSummary"><Stat icon={Package} value={available.length} label="Available" /><Stat icon={Truck} value={mine.length} label="My pickups" /><Stat icon={Recycle} value={`${kg.toFixed(1)} kg`} label="Verified total" /><Stat icon={Coins} value={myPoints} label="Points earned" /></section>
     <React.Suspense fallback={<div className="mapShell mapLoading">Loading map…</div>}><PickupsMap points={available.filter(r => r.latitude != null && r.longitude != null).map(r => ({ lat: r.latitude, lng: r.longitude, popupHtml: `<strong>${r.material_type}</strong><br/>${r.pickup_location} · ${r.estimated_weight_kg} kg` }))} myPos={myPos} myPopupHtml="Your location" /></React.Suspense>
-    <section className="sectionHead"><div><span className="eyebrow">QUEUE</span><h2>Available nearby</h2></div></section>{available.length ? <div className="requestList">{available.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} distanceKm={withDistance(r)} />)}</div> : <EmptyState title="Nothing nearby" body="New collection requests will appear here." />}{mine.length > 0 && <><section className="sectionHead"><div><span className="eyebrow">IN PROGRESS</span><h2>My pickups</h2></div></section><div className="requestList">{mine.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} />)}</div></>}</>
+    <section className="sectionHead"><div><span className="eyebrow">QUEUE</span><h2>Available nearby</h2></div></section>{available.length ? <div className="requestList">{available.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} distanceKm={withDistance(r)} />)}</div> : <EmptyState title="Nothing nearby" body="New collection requests will appear here." />}{mine.length > 0 && <><section className="sectionHead"><div><span className="eyebrow">IN PROGRESS</span><h2>My pickups</h2></div></section><div className="requestList">{mine.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} pointsRate={COLLECTOR_RATE_PER_KG} />)}</div></>}
+    {completed.length > 0 && <><section className="sectionHead"><div><span className="eyebrow">HISTORY</span><h2>Completed collections</h2></div></section><div className="requestList">{completed.map(r => <RequestCard key={r.id} request={r} pointsRate={COLLECTOR_RATE_PER_KG} compact />)}</div></>}</>
 }
 
 function AdminScreen({ requests, verify }) {
   const collected = requests.filter(r => r.status === 'COLLECTED')
   const verified = requests.filter(r => r.status === 'VERIFIED')
   const totalKg = verified.reduce((a, r) => a + (r.actual_weight_kg || 0), 0)
-  const totalPoints = verified.reduce((a, r) => a + Math.round((r.actual_weight_kg || 0) * POINTS_PER_KG), 0)
+  const totalPoints = verified.reduce((a, r) => a + Math.round((r.actual_weight_kg || 0) * POINTS_PER_KG) + (r.collector_id ? Math.round((r.actual_weight_kg || 0) * COLLECTOR_RATE_PER_KG) : 0), 0)
 
   const [applications, setApplications] = useState(null) // null = loading
   const [appError, setAppError] = useState('')
