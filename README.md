@@ -1,56 +1,105 @@
-# BottleUp
+<p align="center">
+  <img src="bottle-up-mvp/public/brand/full.svg" alt="BottleUp — Recycle. Reward. Repeat" width="300" />
+</p>
 
-The application lives in **`bottle-up-mvp/`**. Its main entry point is `bottle-up-mvp/src/main.jsx`.
+<h1 align="center">BottleUp</h1>
+
+<p align="center">Turn plastic pickups into verified recycling and rewards.</p>
+
+<p align="center">
+  <a href="https://github.com/JayHermes/Bottleup/actions/workflows/bottleup-build.yml"><img src="https://github.com/JayHermes/Bottleup/actions/workflows/bottleup-build.yml/badge.svg" alt="Frontend build status" /></a>
+  <img src="https://img.shields.io/badge/React-18-149eca?logo=react&amp;logoColor=white" alt="React 18" />
+  <img src="https://img.shields.io/badge/Supabase-backend-3ecf8e?logo=supabase&amp;logoColor=white" alt="Supabase backend" />
+  <img src="https://img.shields.io/badge/Solana-Devnet-9945ff?logo=solana&amp;logoColor=white" alt="Solana Devnet" />
+</p>
+
+<p align="center">
+  <a href="https://usebottleup.xyz">Open BottleUp</a> ·
+  <a href="docs/README.md">Documentation</a> ·
+  <a href="docs/getting-started.md">Get started</a>
+</p>
+
+BottleUp helps households schedule plastic recycling pickups, connects them with collectors, and rewards recycling after an administrator verifies the collected weight. Verified pickups can also receive a Solana receipt.
+
+**Website:** [usebottleup.xyz](https://usebottleup.xyz) · **Blockchain:** Solana Devnet · **Stack:** React, Vite, Supabase, Leaflet, Anchor
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[Schedule pickup] --> B[Collector collects and weighs]
+    B --> C[Admin verifies]
+    C --> D[Points credited]
+    C --> E[Solana Devnet receipt]
+    D --> F[Request a reward]
+```
+
+1. A user selects a material, estimates the quantity, enters a landmark, and optionally adds a map pin and photo.
+2. A collector accepts the pickup, shares their location, and records the collected weight.
+3. An administrator verifies the pickup. The database credits **100 points per verified kilogram**, once per pickup.
+4. A server-side function records a receipt on Solana Devnet. The user can open it in Solana Explorer.
+5. Users redeem points against the reward catalog. The team handles reward fulfilment manually.
+
+Solana receipts record an authorized recycling attestation. They do not independently prove physical recycling. Personal addresses, contact details, and photographs stay off-chain.
 
 ## Run locally
+
+Use **Node.js 24** and npm for the full test suite.
 
 ```sh
 cd bottle-up-mvp
 npm ci
+cp .env.example .env
+# Fill in your Supabase project URL and publishable key in .env.
 npm run dev
 ```
 
-Open the local URL printed by Vite. If port 5173 is already occupied, Vite selects another port.
-
-## Build
+Open the URL printed by Vite. Landing and authentication screens render without backend credentials; account operations need a configured Supabase project. Maps use OpenStreetMap tiles without an API key. GPS needs HTTPS or localhost and browser permission.
 
 ```sh
+# From the repository root:
+npm --prefix bottle-up-mvp test
 npm --prefix bottle-up-mvp run build
 ```
 
-Vercel and GitHub Actions already build this application directory.
+For a new backend, follow [Getting started](docs/getting-started.md). Solana tooling is only needed to build or deploy the on-chain program, not to run the frontend.
 
-## Design implementation
+## Documentation
 
-- `bottle-up-mvp/src/components/Landing.jsx`: redesigned landing page.
-- `bottle-up-mvp/src/components/AuthPages.jsx`: sign-in, signup, password recovery and reset screens.
-- `bottle-up-mvp/src/components/Brand.jsx`: BottleUp logo.
-- `bottle-up-mvp/src/components/Icons.jsx`: local SVG icon components.
-- `bottle-up-mvp/public/`: illustrations, font, favicon and the icon library copied from KingFTP.
-- `design/brand-study-01/`: original artwork, prompts and design notes.
+| Guide | Contents |
+| --- | --- |
+| [Documentation index](docs/README.md) | All guides and suggested reading order |
+| [Getting started](docs/getting-started.md) | Environment variables, database setup, local development |
+| [Architecture](docs/architecture.md) | Roles, pickup lifecycle, database boundaries, receipt flow |
+| [User guide](docs/user-guide.md) | User, collector, and administrator workflows |
+| [Deployment and operations](docs/deployment.md) | Frontend/backend configuration, rollout checks, troubleshooting |
+| [Testing](docs/testing.md) | Automated tests, local validator, manual release checks |
+| [Solana receipts](solana-verification/README.md) | Program identity, build, deployment, signing, retry recovery |
+| [Points system](docs/points-system.md) | Ledger rules, permissions, concurrency, reconciliation |
+| [Submission readiness](docs/submission-readiness.md) | Dated verification evidence and remaining submission work |
 
-The landing and authentication forms can be viewed without backend configuration. Actual account operations require the Supabase environment variables documented in `bottle-up-mvp/.env.example`. No preview sessions bypass authentication.
+## Repository layout
 
-### Dashboard refresh and bank details
+```text
+bottle-up-mvp/       React application, Supabase SQL/functions, application tests
+solana-verification/ Anchor program, Solana tests, scripts, deployment evidence
+docs/               Setup, architecture, operations, and product documentation
+design/             Brand artwork and design notes
+untitled/           Historical project notes
+.github/workflows/  Frontend build validation
+vercel.json         Frontend build paths and HTTP security headers
+```
 
-Run the nested app's development server and open `/dashboard-preview` to review the new dashboard using clearly labelled sample data. This preview is development-only and cannot save pickups, redeem rewards, or save bank details. Production uses the existing authenticated dashboard.
+## Contributing
 
-When the Supabase credentials arrive, set the frontend URL and publishable/anon key as described above, then run `bottle-up-mvp/supabase/dashboard-settings.sql` after the main schema. It creates the bank-details table with account-owner RLS policies. Test with two separate user accounts: one user's details must not be readable or editable by the other. Bank account numbers remain text so leading zeroes are preserved. Details are manually supplied, not bank-verified; cash payouts are not implemented.
+Read the [setup guide](docs/getting-started.md), keep changes focused, and run the application tests and production build before opening a pull request. Program changes also need the local-validator tests. Include the behavior changed and relevant validation in the PR description.
 
-The refresh includes verified-weight impact totals independent of point redemptions, pickup filters/search, reward confirmation, account help, and bank-details create/edit/remove flows. Live persistence must be verified against the actual Supabase project once credentials are supplied.
+Retain only icon assets used by the UI, keep private credentials out of commits, and update the relevant guide when changing a workflow or configuration. See [testing](docs/testing.md) for release checks.
 
-The isolated PostgreSQL test is `bottle-up-mvp/tests/bank-accounts.test.mjs`. Run it with `node --test` where `@electric-sql/pglite` is installed, or set `PGLITE_MODULE` to that package's absolute module path. It checks owner access, cross-user isolation, anonymous denial, valid updates/removal, and 10-digit validation.
+## Current scope
 
-### Pickup photos
+The main website and Solana Devnet integration have been deployed. Devnet uses test SOL; **there is no Mainnet deployment**. Devnet records should not be treated as permanent production records.
 
-Photos use the private Supabase `pickup-photos` bucket, not Firebase. The storage update is recorded in `bottle-up-mvp/supabase/pickup-photo-storage.sql` and incorporated into the full setup schema. The live storage migration was applied separately; do not rerun the full application schema against production.
+Collector tracking shows the **last shared location**, rather than continuous GPS tracking. Bank details are manually entered, not bank-verified. Cash payouts are not implemented, and reward fulfilment is manual. Real-device GPS and the complete live photo/collector/admin walkthrough remain release checks; see the dated readiness guide.
 
-Users select JPEG, PNG or WebP images up to 8 MB. The browser re-encodes to JPEG, strips metadata and limits dimensions to 1600 pixels. Unsupported/undecodable images produce an error instead of uploading the original. Unique object paths live under the authenticated user's ID. Request cards retrieve five-minute signed URLs on demand. The owner, assigned collector and admins can read attached photos; no public reads are allowed. Failed pickup inserts attempt to remove the unlinked uploaded object, with an explicit message if cleanup fails.
-
-The policy test `bottle-up-mvp/tests/pickup-photo-storage.test.mjs` uses the same PGlite setup as the bank-details test. A live signed-in Storage API upload, pickup insert and participant download remain an end-to-end release check; the development dashboard preview intentionally cannot perform uploads.
-
-### Pickup maps and location
-
-Maps use Leaflet and OpenStreetMap public tiles, with visible attribution and no API key. Public tiles require an internet connection and follow https://operations.osmfoundation.org/policies/tiles/; reassess the tile provider as traffic grows.
-
-GPS capture requires HTTPS (or localhost) and browser location permission. Users can select a pickup pin on the map if GPS is unavailable, while retaining their written landmark. Without a pin, the written location is saved but cannot be plotted or sorted by distance. Collectors can capture or refresh their position explicitly. Tracking displays the last location shared when accepting or starting a pickup, rather than continuous tracking.
+Frontend environment variables are public in the built bundle. Keep database service keys, signing keys, and wallet files out of the frontend and Git.

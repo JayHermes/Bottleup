@@ -27,7 +27,7 @@ Devnet deployment and initialization are complete. The live test created a confi
 
 ## Main website
 
-The submission URL is https://usebottleup.xyz (redirects to www). Its landing page, ordinary-user sign-in, dashboard, Leaflet/OpenStreetMap tile loading, and manual pickup-pin selection were verified in the browser. The disposable browser-test account was signed out and removed. No pickup was submitted or points issued during that browser test. The last successful production version remains accessible while the newer Vercel deployment is being retried. Private Vercel build logs cannot be read with the available account access.
+The submission URL is https://usebottleup.xyz (redirects to www). Its landing page, ordinary-user sign-in, dashboard, Leaflet/OpenStreetMap tile loading, and manual pickup-pin selection were verified in the browser. The disposable browser-test account was signed out and removed. No pickup was submitted or points issued during that browser test. The subsequent Vercel deployment succeeded, and the team confirmed it deployed. These browser checks are dated evidence; the complete live workflow still needs the checks below.
 
 A separate configured fallback is deployed at https://bottleup-submission.sacredtiger3.chatgpt.site. It stays owner-private at the user's request and is not the submission URL.
 

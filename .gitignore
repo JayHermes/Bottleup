@@ -15,3 +15,9 @@ solana-verification/.anchor/
 
 # Separate hosted demo source checkout
 sites/
+
+# Local editor, OS, and assistant metadata
+.DS_Store
+**/.DS_Store
+.qodo/
+*.log

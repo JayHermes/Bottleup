@@ -28,7 +28,15 @@ The workspace manifest, IDL feature, dependency lockfiles, and Node typings are 
 
 `Anchor.toml` points at the deployment wallet in `wallets/devnet-authority.json`. Private wallets and `target/` are ignored by Git. Securely back up both the authority wallet and `target/deploy/bottle_up_receipts-keypair.json`; do not paste their contents into chat or source control. This program permits only its compiled deployment authority to initialize config. Reusing it with a new wallet requires explicitly updating that public authority in Rust and rebuilding.
 
-The installation used for this checkout lives under `/private/tmp/bottleup-tools`. If necessary, set `PATH` to include its root, `solana-release/bin`, and `cargo/bin`, set `CARGO_HOME` to its `cargo` directory, and set `RUSTUP_HOME` to its `rustup` directory. These temporary tools may need reinstalling after system cleanup.
+The original deployment workstation installation lives under `/private/tmp/bottleup-tools`. If necessary, set `PATH` to include its root, `solana-release/bin`, and `cargo/bin`, set `CARGO_HOME` to its `cargo` directory, and set `RUSTUP_HOME` to its `rustup` directory. These temporary tools may need reinstalling after system cleanup.
+
+## Contributor setup without deployment keys
+
+A clone does not include the private authority wallet or program keypair. The Rust program currently permits initialization only by the compiled public authority. Merely generating a wallet will therefore not make the existing tests pass.
+
+For a separate local development instance, create a local test wallet, set `Anchor.toml` to its path, and update the public initialization-authority constant in `programs/bottle_up_receipts/src/lib.rs` to that wallet's public-key bytes. Generate a separate program keypair, synchronize its public program ID across Rust and `Anchor.toml`, then rebuild before running local-validator tests. These changes describe a different instance; do not overwrite the documented shared Devnet identity or commit private key files.
+
+For maintenance of the existing deployed instance, the deployment owner must provide access through a secure key-management process. Mainnet needs a separate deployment plan; the current Edge Function deliberately rejects other networks.
 
 ## Deploy and initialize
 

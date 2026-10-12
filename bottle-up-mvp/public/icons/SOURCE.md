@@ -1,3 +1,5 @@
 # Icon source
 
-Copied from `/Users/bwirehq/dev/kingftp/apps/web/public/icons` at the project owner's request on 2026-09-25. The complete set of 1,358 SVG files is retained. BottleUp renders selected icons through `src/components/Icons.jsx` using the same CSS-mask technique as KingFTP.
+BottleUp uses a subset of the SVG icon library copied from the owner's KingFTP project on 25 September 2026. The app renders these local assets as CSS masks through `src/components/Icons.jsx`.
+
+Only icons referenced by the application are retained. References include named exports in `Icons.jsx`, direct `Icon` usage, and conditional names in the landing/authentication screens. When introducing an icon, add its SVG here and check both branches of any conditional name. Preserve the original asset attribution and applicable licensing when adding files.
