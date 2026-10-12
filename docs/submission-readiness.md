@@ -17,7 +17,19 @@ Program ID: `F8VR44MDbcA6ZFNaz5UerqZLnbVwT7DPKuqNaxLPd6C`.
 Authority: `5a65byZRjdDsn3PWZW7a9TeuEVEwZSpLdh1PaPH2kqaF`.
 Compiled binary SHA-256: `201bea60a08faef988400cd399b191c895f31e4e10f1cc94b42d035977af016d`.
 
-Devnet program deployment, authority initialization, and live receipt/retry evidence are in progress. Do not describe those as complete until their transaction links and test outcome are recorded here.
+Devnet deployment and initialization are complete. The live test created a confirmed receipt, reused the same address/signature on retry, and recovered a deliberately cleared database signature. All synthetic fixtures were removed; no points were awarded.
+
+- [Deployed program](https://explorer.solana.com/address/F8VR44MDbcA6ZFNaz5UerqZLnbVwT7DPKuqNaxLPd6C?cluster=devnet)
+- [Program deployment transaction](https://explorer.solana.com/tx/5fj5Yk5H1SuQoWwbXEZLUNEsYin841g7iVNeDs4PSgAn1aTZfZP4PifubzND1eHSGibQroQR5tYLuyw8gFDMhmyc?cluster=devnet)
+- [Test receipt](https://explorer.solana.com/address/vDqpfUS2G1xpwWi6JT7RANFNCZzckecbjMdPVjuFvnx?cluster=devnet)
+- [Test receipt transaction](https://explorer.solana.com/tx/5LYFvaiKdE7ycMQJpWMC7teGb1KcxDQhE1KejfAZ1W1yX4vxafwjhca2xHQigpkXRXbJt8imnfWGLmmAQEsa9Ffe?cluster=devnet)
+- Machine-readable evidence: `solana-verification/deployment/devnet-test-results.json`.
+
+## Main website
+
+The submission URL is https://usebottleup.xyz (redirects to www). Its landing page and sign-in form were verified in the browser. The last successful production version remains accessible while the newer Vercel deployment is being retried. Private Vercel build logs cannot be read with the available account access.
+
+A separate configured fallback is deployed at https://bottleup-submission.sacredtiger3.chatgpt.site. It stays owner-private at the user's request and is not the submission URL.
 
 ## Submission materials to confirm
 

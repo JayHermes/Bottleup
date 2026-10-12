@@ -58,3 +58,9 @@ Configured server secrets are `SOLANA_RPC_URL`, `SOLANA_RECEIPT_PROGRAM_ID`, and
 Run live tests only with explicit project-owner approval. Set `BOTTLEUP_TEST_KEYS_FILE` to a private JSON file produced by `supabase projects api-keys --output json`. Keys and passwords are not printed or committed. `--configuration-only` checks authenticated integration before program deployment and expects the undeployed program to fail, rather than claiming a completed receipt.
 
 Current evidence and remaining submission work: [submission readiness](../docs/submission-readiness.md).
+
+### Upload recovery
+
+The first bulk upload hit public RPC rate limits. The authority-owned buffer was resumed using `scripts/resume-buffer.mjs <buffer-address>`, which verifies ownership/size, writes only differing chunks at a limited rate, confirms each write over HTTP, and checks exact equality with the compiled binary. It is Devnet-only. The final program was deployed from the completed buffer.
+
+Successful deployment and live test evidence is recorded in `deployment/devnet-test-results.json`.

@@ -12,3 +12,6 @@ solana-verification/target/
 solana-verification/.anchor/
 **/*-keypair.json
 **/wallets/
+
+# Separate hosted demo source checkout
+sites/

@@ -1,0 +1,42 @@
+{
+  "project": "sdubpqggmhadoqmjrgaf",
+  "tested_at": "2026-10-12T14:19:39.666Z",
+  "fixture": "synthetic; no physical collection or points awarded",
+  "checks": [
+    {
+      "name": "unauthenticated rejected",
+      "status": 401
+    },
+    {
+      "name": "ordinary user rejected",
+      "status": 403
+    },
+    {
+      "name": "unverified pickup rejected",
+      "status": 409
+    },
+    {
+      "name": "verified pickup recorded",
+      "status": 200
+    },
+    {
+      "name": "retry recovers same receipt",
+      "status": 200
+    },
+    {
+      "name": "lost database signature recovered",
+      "status": 200
+    }
+  ],
+  "devnet_end_to_end": "passed",
+  "receipt_address": "vDqpfUS2G1xpwWi6JT7RANFNCZzckecbjMdPVjuFvnx",
+  "transaction_signature": "5LYFvaiKdE7ycMQJpWMC7teGb1KcxDQhE1KejfAZ1W1yX4vxafwjhca2xHQigpkXRXbJt8imnfWGLmmAQEsa9Ffe",
+  "explorer": "https://explorer.solana.com/address/vDqpfUS2G1xpwWi6JT7RANFNCZzckecbjMdPVjuFvnx?cluster=devnet",
+  "fixtures_cleaned_up": true,
+  "program_id": "F8VR44MDbcA6ZFNaz5UerqZLnbVwT7DPKuqNaxLPd6C",
+  "authority": "5a65byZRjdDsn3PWZW7a9TeuEVEwZSpLdh1PaPH2kqaF",
+  "program_deployment_signature": "5fj5Yk5H1SuQoWwbXEZLUNEsYin841g7iVNeDs4PSgAn1aTZfZP4PifubzND1eHSGibQroQR5tYLuyw8gFDMhmyc",
+  "initialization_signature": "2s7HyRqnrSMaZtK7pNTq7yU96WM1siEnhJqbbDUPuyiSwkVr6wsmjuK1vBBJnJGeu6tRn2yj5M4bPXhs4JbYhJBu",
+  "config_pda": "7emFSmisA1HEPKZte27AvWr4FuycSnKZNfLYg5f9P9de",
+  "binary_sha256": "201bea60a08faef988400cd399b191c895f31e4e10f1cc94b42d035977af016d"
+}
