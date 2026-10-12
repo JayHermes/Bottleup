@@ -284,11 +284,11 @@ function ReceiptModal({ request, earnedPoints, onClose }) {
           <div className="receiptHashRow"><code>{request.verification_hash}</code><button onClick={copyHash}>{copied ? 'Copied' : 'Copy'}</button></div>
         </div>
       )}
-      {request.onchain_tx_signature ? (
+      {(request.solana_tx_signature || request.onchain_tx_signature) ? (
         <>
-          <a className="primary" style={{ textAlign: 'center' }} href={`https://explorer.solana.com/tx/${request.onchain_tx_signature}?cluster=devnet`} target="_blank" rel="noreferrer">View proof on Solana Explorer <ArrowRight size={16} /></a>
-          {request.onchain_record_account && (
-            <a className="textButton" style={{ textAlign: 'center', marginTop: 8 }} href={`https://explorer.solana.com/address/${request.onchain_record_account}?cluster=devnet`} target="_blank" rel="noreferrer">View permanent record account <ArrowRight size={14} /></a>
+          <a className="primary" style={{ textAlign: 'center' }} href={`https://explorer.solana.com/tx/${(request.solana_tx_signature || request.onchain_tx_signature)}?cluster=devnet`} target="_blank" rel="noreferrer">View proof on Solana Explorer <ArrowRight size={16} /></a>
+          {(request.solana_receipt_address || request.onchain_record_account) && (
+            <a className="textButton" style={{ textAlign: 'center', marginTop: 8 }} href={`https://explorer.solana.com/address/${(request.solana_receipt_address || request.onchain_record_account)}?cluster=devnet`} target="_blank" rel="noreferrer">View permanent record account <ArrowRight size={14} /></a>
           )}
         </>
       ) : (
@@ -302,9 +302,10 @@ function RequestCard({ request, action, compact = false, distanceKm, pointsRate 
   const weight = request.actual_weight_kg || request.estimated_weight_kg
   const earnedPoints = request.status === 'VERIFIED' ? Math.round((request.actual_weight_kg || 0) * pointsRate) : 0
   const [showReceipt, setShowReceipt] = useState(false)
-  return <><article className={`requestCard ${compact ? 'compact' : ''}`}><div className="requestTop"><div className="requestIcon"><Package size={18} /></div><div className="requestMain"><div className="requestTitle">{request.material_type}</div><div className="requestMeta"><span>{request.id.slice(0, 8)}</span><span><MapPin size={12} />{request.pickup_location}</span><span><Weight size={12} />{weight} kg</span>{distanceKm != null && <span className="distanceBadge">{distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` : `${distanceKm.toFixed(1)} km`} away</span>}</div></div><span className={`status ${request.status.toLowerCase()}`}>{STATUS_LABEL[request.status]}</span></div><StageTracker status={request.status} /><PickupPhoto path={request.photo_url} />{(earnedPoints > 0 || action) && <div className="requestBottom">{earnedPoints > 0 ? <span className="points"><Coins size={14} />+{earnedPoints} points</span> : <span />}{request.status === 'VERIFIED' && <button className="textButton" onClick={() => setShowReceipt(true)}>Receipt</button>}{action}</div>}</article>
+  return <><article className={`requestCard ${compact ? 'compact' : ''}`}><div className="requestTop"><div className="requestIcon"><Package size={18} /></div><div className="requestMain"><div className="requestTitle">{request.material_type}</div><div className="requestMeta"><span>{request.id.slice(0, 8)}</span><span><MapPin size={12} />{request.pickup_location}</span><span><Weight size={12} />{weight} kg</span>{distanceKm != null && <span className="distanceBadge">{distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` : `${distanceKm.toFixed(1)} km`} away</span>}</div></div><span className={`status ${request.status.toLowerCase()}`}>{STATUS_LABEL[request.status]}</span></div><StageTracker status={request.status} /><PickupPhoto path={request.photo_url} />{request.status === 'VERIFIED' && <div className="receiptLink">{request.solana_tx_signature ? <a href={`https://explorer.solana.com/tx/${request.solana_tx_signature}?cluster=devnet`} target="_blank" rel="noreferrer">View Solana recycling receipt ↗</a> : request.solana_receipt_address ? <a href={`https://explorer.solana.com/address/${request.solana_receipt_address}?cluster=devnet`} target="_blank" rel="noreferrer">View on-chain receipt ↗</a> : <span>{request.solana_receipt_status === 'pending' || request.solana_receipt_status === 'failed' ? 'Solana receipt pending' : 'Receipt not yet recorded on Solana'}</span>}</div>}{(earnedPoints > 0 || action) && <div className="requestBottom">{earnedPoints > 0 ? <span className="points"><Coins size={14} />+{earnedPoints} points</span> : <span />}{request.status === 'VERIFIED' && <button className="textButton" onClick={() => setShowReceipt(true)}>Receipt</button>}{action}</div>}</article>
     {showReceipt && <ReceiptModal request={request} earnedPoints={earnedPoints} onClose={() => setShowReceipt(false)} />}
   </>
+
 }
 
 function EmptyState({ icon: Icon = Package, title, body }) { return <div className="emptyState"><div className="emptyIcon"><Icon size={22} /></div><strong>{title}</strong><p>{body}</p></div> }
@@ -550,7 +551,7 @@ function CollectorScreen({ requests, userId, accept, startOnTheWay, collect }) {
 
 }
 
-function AdminScreen({ requests, verify }) {
+function AdminScreen({ requests, verify, recordReceipt }) {
   const collected = requests.filter(r => r.status === 'COLLECTED')
   const verified = requests.filter(r => r.status === 'VERIFIED')
   const totalKg = verified.reduce((a, r) => a + (r.actual_weight_kg || 0), 0)
@@ -635,7 +636,7 @@ function AdminScreen({ requests, verify }) {
       ))}</div>
     ) : <EmptyState icon={Gift} title="No pending redemptions" body="Requests to redeem points for rewards will appear here." />}
 
-    <section className="sectionHead"><div><span className="eyebrow">ACTION REQUIRED</span><h2>Verification queue</h2></div><span className="queueCount">{collected.length} waiting</span></section>{collected.length ? <div className="requestList">{collected.map(r => <RequestCard key={r.id} request={r} action={<button className="primary small" onClick={() => verify(r.id)}>Verify + reward</button>} />)}</div> : <EmptyState icon={ShieldCheck} title="Queue is clear" body="Collected pickups will appear here for verification." />}<section className="sectionHead activityHead"><div><span className="eyebrow">RECENT</span><h2>All activity</h2></div></section><div className="requestList">{requests.map(r => <RequestCard key={r.id} request={r} compact />)}</div></>
+    <section className="sectionHead"><div><span className="eyebrow">ACTION REQUIRED</span><h2>Verification queue</h2></div><span className="queueCount">{collected.length} waiting</span></section>{collected.length ? <div className="requestList">{collected.map(r => <RequestCard key={r.id} request={r} action={<button className="primary small" onClick={() => verify(r.id)}>Verify + reward</button>} />)}</div> : <EmptyState icon={ShieldCheck} title="Queue is clear" body="Collected pickups will appear here for verification." />}<section className="sectionHead activityHead"><div><span className="eyebrow">RECENT</span><h2>All activity</h2></div></section><div className="requestList">{requests.map(r => <RequestCard key={r.id} request={r} compact action={r.status === 'VERIFIED' && !r.solana_tx_signature && !r.solana_receipt_address ? <button className="secondary small" onClick={() => recordReceipt(r.id)}>Retry Solana receipt</button> : null} />)}</div></>
 }
 
 function AppShell({ onExit, profile, email, userId, onSaveName, refreshProfile = async () => {}, preview = false }) {
@@ -690,10 +691,19 @@ function AppShell({ onExit, profile, email, userId, onSaveName, refreshProfile =
   const accept = async (id, coords) => { const { error } = await supabase.rpc('accept_pickup', { p_id: id, p_lat: coords?.lat ?? null, p_lng: coords?.lng ?? null }); setNotice(error ? error.message : 'Pickup accepted.'); reload() }
   const startOnTheWay = async (id, coords) => { const { error } = await supabase.rpc('start_on_the_way', { p_id: id, p_lat: coords?.lat ?? null, p_lng: coords?.lng ?? null }); setNotice(error ? error.message : 'Marked as on the way.'); reload() }
   const collect = async (id, weight) => { const { error } = await supabase.rpc('collect_pickup', { p_id: id, p_weight: Number(weight) }); setNotice(error ? error.message : 'Collection marked as collected.'); reload() }
+  const recordReceipt = async id => {
+    try {
+      const { data, error } = await supabase.functions.invoke('record-recycling-receipt', { body: { pickup_id: id } })
+      setNotice(error || data?.error ? 'Weight verification is saved. Solana receipt is pending; retry from All activity.' : 'Solana recycling receipt confirmed.')
+    } catch {
+      setNotice('Weight verification is saved. Solana receipt is pending; retry from All activity.')
+    } finally { reload() }
+  }
   const verify = async id => {
     const { error } = await supabase.rpc('verify_pickup', { p_id: id })
     if (error) { setNotice(error.message); return }
     setNotice('Weight verified and points issued.')
+    void recordReceipt(id)
     reload()
     // Fire-and-forget: anchoring onchain is a bonus proof layer, not something
     // that should block or fail the actual verification if Solana is slow/down.
@@ -701,6 +711,7 @@ function AppShell({ onExit, profile, email, userId, onSaveName, refreshProfile =
       .then(({ error: anchorErr }) => { if (!anchorErr) reload() })
       .catch(() => {})
   }
+
   const redeem = async reward => {
     if (preview || !supabase) throw new Error('Preview only. No reward has been requested.')
     const storageKey = `bottleup-reward:${userId}:${reward.id}`
@@ -713,7 +724,7 @@ function AppShell({ onExit, profile, email, userId, onSaveName, refreshProfile =
   }
   const nav = [{ id: 'home', label: 'Home', icon: Home }, { id: 'pickups', label: 'Pickups', icon: Package }, { id: 'rewards', label: 'Rewards', icon: Gift }, { id: 'wallet', label: 'Wallet', icon: WalletCards }, { id: 'profile', label: 'Profile', icon: UserRound }]
 
-  const content = loadingRequests ? null : role === 'collector' ? <CollectorScreen {...{ requests, userId, accept, startOnTheWay, collect }} /> : role === 'admin' ? <AdminScreen {...{ requests, verify }} /> : screen === 'home' ? <DashboardHome {...{ requests, setScreen, profile, userId }} onNew={() => setShowPickup(true)} /> : screen === 'pickups' ? <PickupsScreen requests={requests} userId={userId} onNew={() => setShowPickup(true)} /> : screen === 'rewards' ? <RewardsScreen points={points} redeem={redeem} redemptions={redemptions} rewards={rewards} rewardsError={rewardsError} /> : screen === 'wallet' ? <WalletScreen points={points} redemptions={redemptions} userId={userId} preview={preview} /> : <ProfileScreen profile={profile} email={email} onSaveName={onSaveName} notify={setNotice} onExit={onExit} setScreen={setScreen} preview={preview} />
+  const content = loadingRequests ? null : role === 'collector' ? <CollectorScreen {...{ requests, userId, accept, startOnTheWay, collect }} /> : role === 'admin' ? <AdminScreen {...{ requests, verify, recordReceipt }} /> : screen === 'home' ? <DashboardHome {...{ requests, setScreen, profile, userId }} onNew={() => setShowPickup(true)} /> : screen === 'pickups' ? <PickupsScreen requests={requests} userId={userId} onNew={() => setShowPickup(true)} /> : screen === 'rewards' ? <RewardsScreen points={points} redeem={redeem} redemptions={redemptions} rewards={rewards} rewardsError={rewardsError} /> : screen === 'wallet' ? <WalletScreen points={points} redemptions={redemptions} userId={userId} preview={preview} /> : <ProfileScreen profile={profile} email={email} onSaveName={onSaveName} notify={setNotice} onExit={onExit} setScreen={setScreen} preview={preview} />
 
   return <>{notifOpen && <div className="notifBackdrop" onClick={() => setNotifOpen(false)} />}<div className="app dashboard">{preview && <div className="previewBanner">Design preview · Sample data · Changes are not saved <a href="/">Back to website ↗</a></div>}<header className="topbar"><div className="topInner"><button className="brand brandButton" onClick={() => { setPreviewRole(null); setScreen('home') }}><BrandLogo /></button><div className="topActions"><div className="notifWrap"><button className="iconButton" title="Notifications" onClick={() => setNotifOpen(o => !o)}><Bell size={18} />{unreadCount > 0 && <span className="notifDot">{unreadCount > 9 ? '9+' : unreadCount}</span>}</button>{notifOpen && <div className="notifPanel"><div className="notifHead"><strong>Notifications</strong>{unreadCount > 0 && <button onClick={markAllRead}>Mark all read</button>}</div>{notifications.length ? notifications.map(n => <button key={n.id} className={`notifRow ${n.read ? '' : 'unread'}`} onClick={() => markRead(n.id)}><span>{n.message}</span><small>{new Date(n.created_at).toLocaleDateString()}</small></button>) : <div className="notifEmpty">Nothing yet — updates on your pickups will show up here.</div>}</div>}</div><Avatar name={profile?.full_name} email={email} size="sm" /></div></div></header><div className="appBody"><aside className="sidebar"><div className="rolePill"><span>{canPreview && previewRole ? 'PREVIEWING' : 'ACCOUNT'}</span><strong>{role === 'user' ? 'User' : role === 'collector' ? 'Collector' : 'Admin'}</strong></div>{role === 'user' && nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'navItem active' : 'navItem'} onClick={() => setScreen(id)}><Icon size={18} />{label}</button>)}<div className="sideBottom">{canPreview && <div className="previewSwitch"><span className="previewLabel">PREVIEW AS</span><div className="previewOptions">{['user', 'collector', 'admin'].map(r => <button key={r} className={role === r ? 'active' : ''} onClick={() => setPreviewRole(r === 'admin' ? null : r)}>{r === 'user' ? 'User' : r === 'collector' ? 'Collector' : 'Admin'}</button>)}</div></div>}<button className="navItem" onClick={onExit}><ArrowRight size={18} />Sign out</button></div></aside><main className="main">{notice && <button className="notice" onClick={() => setNotice('')}><Check size={15} />{notice}<X size={14} /></button>}{redemptionsError && <p role="alert">{redemptionsError} <button className="secondary" onClick={reloadRedemptions}>Retry</button></p>}{requestsError && <div className="authMessage authError" style={{ marginBottom: 14 }}>{requestsError} <button className="secondary" onClick={reload}>Retry</button></div>}{loadingRequests && <p role="status">Loading your dashboard…</p>}{content}{showPickup && <PickupModal onSubmit={submitPickup} close={() => setShowPickup(false)}/>}</main></div><nav className="mobileNav">{role === 'user' ? nav.map(({ id, label, icon: Icon }) => <button key={id} className={screen === id ? 'active' : ''} onClick={() => setScreen(id)}><Icon size={18} /><span>{label}</span></button>) : <>{canPreview && ['user', 'collector', 'admin'].map(r => <button key={r} className={role === r ? 'active' : ''} onClick={() => setPreviewRole(r === 'admin' ? null : r)}><Users size={18} /><span>{r === 'user' ? 'User' : r === 'collector' ? 'Collector' : 'Admin'}</span></button>)}<button onClick={onExit}><ArrowRight size={18} /><span>Sign out</span></button></>}</nav></div></>
 }
