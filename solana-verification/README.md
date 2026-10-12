@@ -26,7 +26,7 @@ From this directory:
 5. Run `anchor build` once to generate the program keypair under `target/deploy` (the first build may require the placeholder ID to be synced; if so, run `anchor keys sync` and rebuild).
 6. Run `anchor keys sync` to make the program ID in Anchor.toml and lib.rs match the generated program keypair, then run `anchor build` again.
 7. Run `anchor deploy --provider.cluster devnet`.
-8. Initialize the config exactly once, using the deployer wallet that should control receipts. Do not let an untrusted wallet initialize first. See the initialization instruction and account seeds in `programs/bottle_up_receipts/src/lib.rs`.
+8. Initialize the config exactly once, using the deployer wallet that should control receipts. Do not let an untrusted wallet initialize first: run `anchor run initialize`. The script refuses to claim an already-initialized config owned by a different wallet.
 
 Keep the deployer keypair private. Never commit it to GitHub.
 
