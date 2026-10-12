@@ -263,10 +263,48 @@ function StageTracker({ status }) {
 
 function Stat({ icon: Icon, value, label }) { return <div className="miniStat"><div className="miniIcon"><Icon size={16} /></div><strong>{value}</strong><span>{label}</span></div> }
 
+function ReceiptModal({ request, earnedPoints, onClose }) {
+  const [copied, setCopied] = useState(false)
+  const copyHash = () => { navigator.clipboard?.writeText(request.verification_hash || ''); setCopied(true); setTimeout(() => setCopied(false), 1500) }
+  return <div className="authGate" onClick={onClose}>
+    <div className="authCard receiptCard" onClick={e => e.stopPropagation()}>
+      <button className="iconButton authBack" onClick={onClose}><X size={18} /></button>
+      <div className="authBrand"><Logo /><span>Bottle<span>Up</span></span></div>
+      <h1 className="authTitle">Recycling receipt</h1>
+      <p className="authCopy">A verified record of this collection.</p>
+      <div className="receiptRows">
+        <div><span>Material</span><strong>{request.material_type}</strong></div>
+        <div><span>Verified weight</span><strong>{request.actual_weight_kg} kg</strong></div>
+        <div><span>Points awarded</span><strong>{earnedPoints.toLocaleString()} pts</strong></div>
+        <div><span>Verified</span><strong>{request.verified_at ? new Date(request.verified_at).toLocaleString() : '—'}</strong></div>
+      </div>
+      {request.verification_hash && (
+        <div className="receiptHash">
+          <span>Verification hash</span>
+          <div className="receiptHashRow"><code>{request.verification_hash}</code><button onClick={copyHash}>{copied ? 'Copied' : 'Copy'}</button></div>
+        </div>
+      )}
+      {request.onchain_tx_signature ? (
+        <>
+          <a className="primary" style={{ textAlign: 'center' }} href={`https://explorer.solana.com/tx/${request.onchain_tx_signature}?cluster=devnet`} target="_blank" rel="noreferrer">View proof on Solana Explorer <ArrowRight size={16} /></a>
+          {request.onchain_record_account && (
+            <a className="textButton" style={{ textAlign: 'center', marginTop: 8 }} href={`https://explorer.solana.com/address/${request.onchain_record_account}?cluster=devnet`} target="_blank" rel="noreferrer">View permanent record account <ArrowRight size={14} /></a>
+          )}
+        </>
+      ) : (
+        <div className="authMessage">Onchain proof is still being submitted — check back shortly.</div>
+      )}
+    </div>
+  </div>
+}
+
 function RequestCard({ request, action, compact = false, distanceKm, pointsRate = POINTS_PER_KG }) {
   const weight = request.actual_weight_kg || request.estimated_weight_kg
   const earnedPoints = request.status === 'VERIFIED' ? Math.round((request.actual_weight_kg || 0) * pointsRate) : 0
-  return <article className={`requestCard ${compact ? 'compact' : ''}`}><div className="requestTop"><div className="requestIcon"><Package size={18} /></div><div className="requestMain"><div className="requestTitle">{request.material_type}</div><div className="requestMeta"><span>{request.id.slice(0, 8)}</span><span><MapPin size={12} />{request.pickup_location}</span><span><Weight size={12} />{weight} kg</span>{distanceKm != null && <span className="distanceBadge">{distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` : `${distanceKm.toFixed(1)} km`} away</span>}</div></div><span className={`status ${request.status.toLowerCase()}`}>{STATUS_LABEL[request.status]}</span></div><StageTracker status={request.status} /><PickupPhoto path={request.photo_url} />{(earnedPoints > 0 || action) && <div className="requestBottom">{earnedPoints > 0 ? <span className="points"><Coins size={14} />+{earnedPoints} points</span> : <span />}{action}</div>}</article>
+  const [showReceipt, setShowReceipt] = useState(false)
+  return <><article className={`requestCard ${compact ? 'compact' : ''}`}><div className="requestTop"><div className="requestIcon"><Package size={18} /></div><div className="requestMain"><div className="requestTitle">{request.material_type}</div><div className="requestMeta"><span>{request.id.slice(0, 8)}</span><span><MapPin size={12} />{request.pickup_location}</span><span><Weight size={12} />{weight} kg</span>{distanceKm != null && <span className="distanceBadge">{distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` : `${distanceKm.toFixed(1)} km`} away</span>}</div></div><span className={`status ${request.status.toLowerCase()}`}>{STATUS_LABEL[request.status]}</span></div><StageTracker status={request.status} /><PickupPhoto path={request.photo_url} />{(earnedPoints > 0 || action) && <div className="requestBottom">{earnedPoints > 0 ? <span className="points"><Coins size={14} />+{earnedPoints} points</span> : <span />}{request.status === 'VERIFIED' && <button className="textButton" onClick={() => setShowReceipt(true)}>Receipt</button>}{action}</div>}</article>
+    {showReceipt && <ReceiptModal request={request} earnedPoints={earnedPoints} onClose={() => setShowReceipt(false)} />}
+  </>
 }
 
 function EmptyState({ icon: Icon = Package, title, body }) { return <div className="emptyState"><div className="emptyIcon"><Icon size={22} /></div><strong>{title}</strong><p>{body}</p></div> }
@@ -652,7 +690,17 @@ function AppShell({ onExit, profile, email, userId, onSaveName, refreshProfile =
   const accept = async (id, coords) => { const { error } = await supabase.rpc('accept_pickup', { p_id: id, p_lat: coords?.lat ?? null, p_lng: coords?.lng ?? null }); setNotice(error ? error.message : 'Pickup accepted.'); reload() }
   const startOnTheWay = async (id, coords) => { const { error } = await supabase.rpc('start_on_the_way', { p_id: id, p_lat: coords?.lat ?? null, p_lng: coords?.lng ?? null }); setNotice(error ? error.message : 'Marked as on the way.'); reload() }
   const collect = async (id, weight) => { const { error } = await supabase.rpc('collect_pickup', { p_id: id, p_weight: Number(weight) }); setNotice(error ? error.message : 'Collection marked as collected.'); reload() }
-  const verify = async id => { const { error } = await supabase.rpc('verify_pickup', { p_id: id }); setNotice(error ? error.message : 'Weight verified and points issued.'); reload() }
+  const verify = async id => {
+    const { error } = await supabase.rpc('verify_pickup', { p_id: id })
+    if (error) { setNotice(error.message); return }
+    setNotice('Weight verified and points issued.')
+    reload()
+    // Fire-and-forget: anchoring onchain is a bonus proof layer, not something
+    // that should block or fail the actual verification if Solana is slow/down.
+    supabase.functions.invoke('anchor-onchain', { body: { pickup_id: id } })
+      .then(({ error: anchorErr }) => { if (!anchorErr) reload() })
+      .catch(() => {})
+  }
   const redeem = async reward => {
     if (preview || !supabase) throw new Error('Preview only. No reward has been requested.')
     const storageKey = `bottleup-reward:${userId}:${reward.id}`
