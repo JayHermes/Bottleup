@@ -23,8 +23,8 @@ From this directory:
 2. Point CLI at Devnet: `solana config set --url devnet`.
 3. Obtain Devnet SOL: `solana airdrop 2`.
 4. Install Anchor dependencies if prompted: `anchor --version` should report 0.31.1.
-5. Run `anchor keys list`. Then run `anchor keys sync` to replace the placeholder program ID in Anchor.toml and lib.rs with the generated program keypair's public key.
-6. Run `anchor build`.
+5. Run `anchor build` once to generate the program keypair under `target/deploy` (the first build may require the placeholder ID to be synced; if so, run `anchor keys sync` and rebuild).
+6. Run `anchor keys sync` to make the program ID in Anchor.toml and lib.rs match the generated program keypair, then run `anchor build` again.
 7. Run `anchor deploy --provider.cluster devnet`.
 8. Initialize the config exactly once, using the deployer wallet that should control receipts. Do not let an untrusted wallet initialize first. See the initialization instruction and account seeds in `programs/bottle_up_receipts/src/lib.rs`.
 
