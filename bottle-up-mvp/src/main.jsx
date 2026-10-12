@@ -16,7 +16,7 @@ import Landing from './components/Landing.jsx'
 import { AuthLayout, AuthPanel, ResetPasswordScreen } from './components/AuthPages.jsx'
 import { BrandMark, BrandLogo } from './components/Brand.jsx'
 import { supabase } from './lib/supabase.js'
-import { geocode, staticMapUrl } from './lib/mapbox.js'
+import { getCurrentLocation } from './lib/location.js'
 
 function useAuth() {
   const [session, setSession] = useState(undefined) // undefined = still checking, null = signed out
@@ -334,15 +334,12 @@ function PickupModal({ onSubmit, close }) {
     setPreview(prev => { if (prev) URL.revokeObjectURL(prev); return file ? URL.createObjectURL(file) : null })
   }
 
-  const useMyLocation = () => {
-    if (!navigator.geolocation) { setLocateError('Location is not available on this device.'); return }
+  const useMyLocation = async () => {
     setLocating(true)
     setLocateError('')
-    navigator.geolocation.getCurrentPosition(
-      pos => { setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLocating(false) },
-      () => { setLocateError("Couldn't get your location — you can still type it below."); setLocating(false) },
-      { timeout: 10000 }
-    )
+    try { setCoords(await getCurrentLocation()) }
+    catch (error) { setLocateError(error.message) }
+    finally { setLocating(false) }
   }
 
   const submit = async e => {
@@ -350,14 +347,9 @@ function PickupModal({ onSubmit, close }) {
     if (!estimate || !location) return
     setBusy(true)
     setError('')
-    // The person counts bottles (what they can actually see in front of them);
-    // storage and every downstream calculation still work in kg, so convert
-    // here, at the one place bottles become a number anyone typed in.
     const estimateKg = Number(estimate) / BOTTLES_PER_KG
-    // If they didn't tap "use my location," fall back to converting what they
-    // typed into coordinates, so distance-sorting still works for this pickup.
     try {
-      const finalCoords = coords || await geocode(`${location}, Nigeria`)
+      const finalCoords = coords
       const err = await onSubmit({ type, estimate: estimateKg, location, photo, coords: finalCoords })
       if (err) setError(err.message || 'Could not submit this request. Please try again.')
       else close()
@@ -380,9 +372,13 @@ function PickupModal({ onSubmit, close }) {
       <p className="fieldHint">About {BOTTLES_PER_KG} bottles ≈ 1 kg. Your final reward is based on the actual weight collectors verify.</p>
       <label>Pickup location<div className="inputWithIcon"><MapPin size={16} /><input required value={location} onChange={e => setLocation(e.target.value)} placeholder="Area or landmark" /></div></label>
       <button type="button" className="locateButton" onClick={useMyLocation} disabled={locating}>
-        {coords ? <><Check size={14} />Precise location captured</> : locating ? 'Getting your location…' : <><MapPin size={14} />Add my precise location <span>(optional, helps collectors find you)</span></>}
+        {coords ? <><Check size={14} />Location selected · Retry GPS</> : locating ? 'Getting your location…' : <><MapPin size={14} />Add my precise location <span>(optional, helps collectors find you)</span></>}
       </button>
-      {coords && staticMapUrl(coords.lat, coords.lng) && <img className="locateMap" src={staticMapUrl(coords.lat, coords.lng)} alt="Your captured pickup location" />}
+      <div className="formNote">Tap the map to choose your pickup location. Keep the area or landmark above so collectors can find you.</div>
+      <React.Suspense fallback={<div className="mapShell mapLoading">Loading map…</div>}>
+        <PickupsMap myPos={coords} myPopupText="Your pickup location" onSelect={point => { setCoords(point); setLocateError('') }} />
+      </React.Suspense>
+      {coords && <div className="formNote">Selected pin: {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</div>}
       {locateError && <div className="authMessage authError">{locateError}</div>}
       <div className="formNote"><ShieldCheck size={15} /> Final points are based on verified weight after collection.</div>
       {error && <div className="authMessage authError">{error}</div>}
@@ -402,12 +398,12 @@ function PickupsScreen({ requests, userId, onNew }) {
   return <><PageTitle eyebrow="YOUR ACTIVITY" title="Pickups" body="Track every collection from request to verified weight." /><div className="pickupToolbar"><div className="filterTabs">{['All','Active','Verified'].map(label => <button key={label} aria-pressed={filter === label} onClick={() => setFilter(label)}>{label}</button>)}</div><input aria-label="Search pickups" placeholder="Search collections…" value={search} onChange={e => setSearch(e.target.value)}/><button className="primary" onClick={onNew}>New pickup</button></div>
     {tracking && (
       <section className="trackingCard">
-        <div className="sectionHead"><div><span className="eyebrow">LIVE</span><h2>Your collector</h2></div>{distance != null && <span className="distanceBadge">{distance < 1 ? `${Math.round(distance * 1000)} m away` : `${distance.toFixed(1)} km away`}</span>}</div>
+        <div className="sectionHead"><div><span className="eyebrow">LAST SHARED LOCATION</span><h2>Your collector</h2></div>{distance != null && <span className="distanceBadge">{distance < 1 ? `${Math.round(distance * 1000)} m away` : `${distance.toFixed(1)} km away`}</span>}</div>
         <React.Suspense fallback={<div className="mapShell mapLoading">Loading map…</div>}>
           <PickupsMap
-            points={[{ lat: tracking.collector_latitude, lng: tracking.collector_longitude, popupHtml: 'Your collector' }]}
+            points={[{ lat: tracking.collector_latitude, lng: tracking.collector_longitude, popupText: 'Your collector' }]}
             myPos={{ lat: tracking.latitude, lng: tracking.longitude }}
-            myPopupHtml="Your pickup location"
+            myPopupText="Your pickup location"
           />
         </React.Suspense>
       </section>
@@ -515,14 +511,15 @@ const PickupsMap = React.lazy(() => import('./PickupsMap.jsx'))
 
 function CollectorScreen({ requests, userId, accept, startOnTheWay, collect }) {
   const [myPos, setMyPos] = useState(null)
-  useEffect(() => {
-    if (!navigator.geolocation) return
-    navigator.geolocation.getCurrentPosition(
-      pos => setMyPos({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {}, // silent — distance sorting is a nice-to-have, not required to use the screen
-      { timeout: 8000 }
-    )
-  }, [])
+  const [locating, setLocating] = useState(false)
+  const [locateError, setLocateError] = useState('')
+  const locate = async () => {
+    setLocating(true)
+    setLocateError('')
+    try { setMyPos(await getCurrentLocation()) }
+    catch (error) { setLocateError(error.message) }
+    finally { setLocating(false) }
+  }
 
   const withDistance = r => myPos && r.latitude != null && r.longitude != null
     ? haversineKm(myPos.lat, myPos.lng, r.latitude, r.longitude)
@@ -545,9 +542,12 @@ function CollectorScreen({ requests, userId, accept, startOnTheWay, collect }) {
   }
 
   return <><PageTitle eyebrow="COLLECTOR MODE" title="Today's pickups" body={myPos ? "Sorted by distance from your current location." : "Accept nearby requests and keep every collection moving."} /><section className="collectorSummary"><Stat icon={Package} value={available.length} label="Available" /><Stat icon={Truck} value={mine.length} label="My pickups" /><Stat icon={Recycle} value={`${kg.toFixed(1)} kg`} label="Verified total" /><Stat icon={Coins} value={myPoints} label="Points earned" /></section>
-    <React.Suspense fallback={<div className="mapShell mapLoading">Loading map…</div>}><PickupsMap points={available.filter(r => r.latitude != null && r.longitude != null).map(r => ({ lat: r.latitude, lng: r.longitude, popupHtml: `<strong>${r.material_type}</strong><br/>${r.pickup_location} · ${r.estimated_weight_kg} kg` }))} myPos={myPos} myPopupHtml="Your location" /></React.Suspense>
+    <button type="button" className="locateButton" onClick={locate} disabled={locating}>{locating ? 'Getting your location…' : myPos ? 'Refresh my location' : 'Use my location to find nearby pickups'}</button>
+    {locateError && <div className="authMessage authError" role="status">{locateError}</div>}
+    <React.Suspense fallback={<div className="mapShell mapLoading">Loading map…</div>}><PickupsMap points={available.filter(r => r.latitude != null && r.longitude != null).map(r => ({ lat: r.latitude, lng: r.longitude, popupText: `${r.material_type}\n${r.pickup_location} · ${r.estimated_weight_kg} kg` }))} myPos={myPos} myPopupText="Your location" /></React.Suspense>
     <section className="sectionHead"><div><span className="eyebrow">QUEUE</span><h2>Available nearby</h2></div></section>{available.length ? <div className="requestList">{available.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} distanceKm={withDistance(r)} />)}</div> : <EmptyState title="Nothing nearby" body="New collection requests will appear here." />}{mine.length > 0 && <><section className="sectionHead"><div><span className="eyebrow">IN PROGRESS</span><h2>My pickups</h2></div></section><div className="requestList">{mine.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} pointsRate={COLLECTOR_RATE_PER_KG} />)}</div></>}
     {completed.length > 0 && <><section className="sectionHead"><div><span className="eyebrow">HISTORY</span><h2>Completed collections</h2></div></section><div className="requestList">{completed.map(r => <RequestCard key={r.id} request={r} pointsRate={COLLECTOR_RATE_PER_KG} compact />)}</div></>}</>
+
 }
 
 function AdminScreen({ requests, verify }) {
