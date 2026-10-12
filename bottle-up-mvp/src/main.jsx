@@ -16,7 +16,7 @@ import Landing from './components/Landing.jsx'
 import { AuthLayout, AuthPanel, ResetPasswordScreen } from './components/AuthPages.jsx'
 import { BrandMark, BrandLogo } from './components/Brand.jsx'
 import { supabase } from './lib/supabase.js'
-import { geocode, staticMapUrl } from './lib/mapbox.js'
+import { getCurrentLocation } from './lib/location.js'
 
 function useAuth() {
   const [session, setSession] = useState(undefined) // undefined = still checking, null = signed out
@@ -263,10 +263,49 @@ function StageTracker({ status }) {
 
 function Stat({ icon: Icon, value, label }) { return <div className="miniStat"><div className="miniIcon"><Icon size={16} /></div><strong>{value}</strong><span>{label}</span></div> }
 
+function ReceiptModal({ request, earnedPoints, onClose }) {
+  const [copied, setCopied] = useState(false)
+  const copyHash = () => { navigator.clipboard?.writeText(request.verification_hash || ''); setCopied(true); setTimeout(() => setCopied(false), 1500) }
+  return <div className="authGate" onClick={onClose}>
+    <div className="authCard receiptCard" onClick={e => e.stopPropagation()}>
+      <button className="iconButton authBack" onClick={onClose}><X size={18} /></button>
+      <div className="authBrand"><Logo /><span>Bottle<span>Up</span></span></div>
+      <h1 className="authTitle">Recycling receipt</h1>
+      <p className="authCopy">A verified record of this collection.</p>
+      <div className="receiptRows">
+        <div><span>Material</span><strong>{request.material_type}</strong></div>
+        <div><span>Verified weight</span><strong>{request.actual_weight_kg} kg</strong></div>
+        <div><span>Points awarded</span><strong>{earnedPoints.toLocaleString()} pts</strong></div>
+        <div><span>Verified</span><strong>{request.verified_at ? new Date(request.verified_at).toLocaleString() : '—'}</strong></div>
+      </div>
+      {request.verification_hash && (
+        <div className="receiptHash">
+          <span>Verification hash</span>
+          <div className="receiptHashRow"><code>{request.verification_hash}</code><button onClick={copyHash}>{copied ? 'Copied' : 'Copy'}</button></div>
+        </div>
+      )}
+      {(request.solana_tx_signature || request.onchain_tx_signature) ? (
+        <>
+          <a className="primary" style={{ textAlign: 'center' }} href={`https://explorer.solana.com/tx/${(request.solana_tx_signature || request.onchain_tx_signature)}?cluster=devnet`} target="_blank" rel="noreferrer">View proof on Solana Explorer <ArrowRight size={16} /></a>
+          {(request.solana_receipt_address || request.onchain_record_account) && (
+            <a className="textButton" style={{ textAlign: 'center', marginTop: 8 }} href={`https://explorer.solana.com/address/${(request.solana_receipt_address || request.onchain_record_account)}?cluster=devnet`} target="_blank" rel="noreferrer">View permanent record account <ArrowRight size={14} /></a>
+          )}
+        </>
+      ) : (
+        <div className="authMessage">Onchain proof is still being submitted — check back shortly.</div>
+      )}
+    </div>
+  </div>
+}
+
 function RequestCard({ request, action, compact = false, distanceKm, pointsRate = POINTS_PER_KG }) {
   const weight = request.actual_weight_kg || request.estimated_weight_kg
   const earnedPoints = request.status === 'VERIFIED' ? Math.round((request.actual_weight_kg || 0) * pointsRate) : 0
-  return <article className={`requestCard ${compact ? 'compact' : ''}`}><div className="requestTop"><div className="requestIcon"><Package size={18} /></div><div className="requestMain"><div className="requestTitle">{request.material_type}</div><div className="requestMeta"><span>{request.id.slice(0, 8)}</span><span><MapPin size={12} />{request.pickup_location}</span><span><Weight size={12} />{weight} kg</span>{distanceKm != null && <span className="distanceBadge">{distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` : `${distanceKm.toFixed(1)} km`} away</span>}</div></div><span className={`status ${request.status.toLowerCase()}`}>{STATUS_LABEL[request.status]}</span></div><StageTracker status={request.status} /><PickupPhoto path={request.photo_url} />{request.status === 'VERIFIED' && <div className="receiptLink">{request.solana_tx_signature ? <a href={`https://explorer.solana.com/tx/${request.solana_tx_signature}?cluster=devnet`} target="_blank" rel="noreferrer">View Solana recycling receipt ↗</a> : request.solana_receipt_address ? <a href={`https://explorer.solana.com/address/${request.solana_receipt_address}?cluster=devnet`} target="_blank" rel="noreferrer">View on-chain receipt ↗</a> : <span>{request.solana_receipt_status === 'pending' || request.solana_receipt_status === 'failed' ? 'Solana receipt pending' : 'Receipt not yet recorded on Solana'}</span>}</div>}{(earnedPoints > 0 || action) && <div className="requestBottom">{earnedPoints > 0 ? <span className="points"><Coins size={14} />+{earnedPoints} points</span> : <span />}{action}</div>}</article>
+  const [showReceipt, setShowReceipt] = useState(false)
+  return <><article className={`requestCard ${compact ? 'compact' : ''}`}><div className="requestTop"><div className="requestIcon"><Package size={18} /></div><div className="requestMain"><div className="requestTitle">{request.material_type}</div><div className="requestMeta"><span>{request.id.slice(0, 8)}</span><span><MapPin size={12} />{request.pickup_location}</span><span><Weight size={12} />{weight} kg</span>{distanceKm != null && <span className="distanceBadge">{distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` : `${distanceKm.toFixed(1)} km`} away</span>}</div></div><span className={`status ${request.status.toLowerCase()}`}>{STATUS_LABEL[request.status]}</span></div><StageTracker status={request.status} /><PickupPhoto path={request.photo_url} />{request.status === 'VERIFIED' && <div className="receiptLink">{request.solana_tx_signature ? <a href={`https://explorer.solana.com/tx/${request.solana_tx_signature}?cluster=devnet`} target="_blank" rel="noreferrer">View Solana recycling receipt ↗</a> : request.solana_receipt_address ? <a href={`https://explorer.solana.com/address/${request.solana_receipt_address}?cluster=devnet`} target="_blank" rel="noreferrer">View on-chain receipt ↗</a> : <span>{request.solana_receipt_status === 'pending' || request.solana_receipt_status === 'failed' ? 'Solana receipt pending' : 'Receipt not yet recorded on Solana'}</span>}</div>}{(earnedPoints > 0 || action) && <div className="requestBottom">{earnedPoints > 0 ? <span className="points"><Coins size={14} />+{earnedPoints} points</span> : <span />}{request.status === 'VERIFIED' && <button className="textButton" onClick={() => setShowReceipt(true)}>Receipt</button>}{action}</div>}</article>
+    {showReceipt && <ReceiptModal request={request} earnedPoints={earnedPoints} onClose={() => setShowReceipt(false)} />}
+  </>
+
 }
 
 function EmptyState({ icon: Icon = Package, title, body }) { return <div className="emptyState"><div className="emptyIcon"><Icon size={22} /></div><strong>{title}</strong><p>{body}</p></div> }
@@ -296,15 +335,12 @@ function PickupModal({ onSubmit, close }) {
     setPreview(prev => { if (prev) URL.revokeObjectURL(prev); return file ? URL.createObjectURL(file) : null })
   }
 
-  const useMyLocation = () => {
-    if (!navigator.geolocation) { setLocateError('Location is not available on this device.'); return }
+  const useMyLocation = async () => {
     setLocating(true)
     setLocateError('')
-    navigator.geolocation.getCurrentPosition(
-      pos => { setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLocating(false) },
-      () => { setLocateError("Couldn't get your location — you can still type it below."); setLocating(false) },
-      { timeout: 10000 }
-    )
+    try { setCoords(await getCurrentLocation()) }
+    catch (error) { setLocateError(error.message) }
+    finally { setLocating(false) }
   }
 
   const submit = async e => {
@@ -312,14 +348,9 @@ function PickupModal({ onSubmit, close }) {
     if (!estimate || !location) return
     setBusy(true)
     setError('')
-    // The person counts bottles (what they can actually see in front of them);
-    // storage and every downstream calculation still work in kg, so convert
-    // here, at the one place bottles become a number anyone typed in.
     const estimateKg = Number(estimate) / BOTTLES_PER_KG
-    // If they didn't tap "use my location," fall back to converting what they
-    // typed into coordinates, so distance-sorting still works for this pickup.
     try {
-      const finalCoords = coords || await geocode(`${location}, Nigeria`)
+      const finalCoords = coords
       const err = await onSubmit({ type, estimate: estimateKg, location, photo, coords: finalCoords })
       if (err) setError(err.message || 'Could not submit this request. Please try again.')
       else close()
@@ -342,9 +373,13 @@ function PickupModal({ onSubmit, close }) {
       <p className="fieldHint">About {BOTTLES_PER_KG} bottles ≈ 1 kg. Your final reward is based on the actual weight collectors verify.</p>
       <label>Pickup location<div className="inputWithIcon"><MapPin size={16} /><input required value={location} onChange={e => setLocation(e.target.value)} placeholder="Area or landmark" /></div></label>
       <button type="button" className="locateButton" onClick={useMyLocation} disabled={locating}>
-        {coords ? <><Check size={14} />Precise location captured</> : locating ? 'Getting your location…' : <><MapPin size={14} />Add my precise location <span>(optional, helps collectors find you)</span></>}
+        {coords ? <><Check size={14} />Location selected · Retry GPS</> : locating ? 'Getting your location…' : <><MapPin size={14} />Add my precise location <span>(optional, helps collectors find you)</span></>}
       </button>
-      {coords && staticMapUrl(coords.lat, coords.lng) && <img className="locateMap" src={staticMapUrl(coords.lat, coords.lng)} alt="Your captured pickup location" />}
+      <div className="formNote">Tap the map to choose your pickup location. Keep the area or landmark above so collectors can find you.</div>
+      <React.Suspense fallback={<div className="mapShell mapLoading">Loading map…</div>}>
+        <PickupsMap myPos={coords} myPopupText="Your pickup location" onSelect={point => { setCoords(point); setLocateError('') }} />
+      </React.Suspense>
+      {coords && <div className="formNote">Selected pin: {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</div>}
       {locateError && <div className="authMessage authError">{locateError}</div>}
       <div className="formNote"><ShieldCheck size={15} /> Final points are based on verified weight after collection.</div>
       {error && <div className="authMessage authError">{error}</div>}
@@ -364,12 +399,12 @@ function PickupsScreen({ requests, userId, onNew }) {
   return <><PageTitle eyebrow="YOUR ACTIVITY" title="Pickups" body="Track every collection from request to verified weight." /><div className="pickupToolbar"><div className="filterTabs">{['All','Active','Verified'].map(label => <button key={label} aria-pressed={filter === label} onClick={() => setFilter(label)}>{label}</button>)}</div><input aria-label="Search pickups" placeholder="Search collections…" value={search} onChange={e => setSearch(e.target.value)}/><button className="primary" onClick={onNew}>New pickup</button></div>
     {tracking && (
       <section className="trackingCard">
-        <div className="sectionHead"><div><span className="eyebrow">LIVE</span><h2>Your collector</h2></div>{distance != null && <span className="distanceBadge">{distance < 1 ? `${Math.round(distance * 1000)} m away` : `${distance.toFixed(1)} km away`}</span>}</div>
+        <div className="sectionHead"><div><span className="eyebrow">LAST SHARED LOCATION</span><h2>Your collector</h2></div>{distance != null && <span className="distanceBadge">{distance < 1 ? `${Math.round(distance * 1000)} m away` : `${distance.toFixed(1)} km away`}</span>}</div>
         <React.Suspense fallback={<div className="mapShell mapLoading">Loading map…</div>}>
           <PickupsMap
-            points={[{ lat: tracking.collector_latitude, lng: tracking.collector_longitude, popupHtml: 'Your collector' }]}
+            points={[{ lat: tracking.collector_latitude, lng: tracking.collector_longitude, popupText: 'Your collector' }]}
             myPos={{ lat: tracking.latitude, lng: tracking.longitude }}
-            myPopupHtml="Your pickup location"
+            myPopupText="Your pickup location"
           />
         </React.Suspense>
       </section>
@@ -477,14 +512,15 @@ const PickupsMap = React.lazy(() => import('./PickupsMap.jsx'))
 
 function CollectorScreen({ requests, userId, accept, startOnTheWay, collect }) {
   const [myPos, setMyPos] = useState(null)
-  useEffect(() => {
-    if (!navigator.geolocation) return
-    navigator.geolocation.getCurrentPosition(
-      pos => setMyPos({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {}, // silent — distance sorting is a nice-to-have, not required to use the screen
-      { timeout: 8000 }
-    )
-  }, [])
+  const [locating, setLocating] = useState(false)
+  const [locateError, setLocateError] = useState('')
+  const locate = async () => {
+    setLocating(true)
+    setLocateError('')
+    try { setMyPos(await getCurrentLocation()) }
+    catch (error) { setLocateError(error.message) }
+    finally { setLocating(false) }
+  }
 
   const withDistance = r => myPos && r.latitude != null && r.longitude != null
     ? haversineKm(myPos.lat, myPos.lng, r.latitude, r.longitude)
@@ -507,9 +543,12 @@ function CollectorScreen({ requests, userId, accept, startOnTheWay, collect }) {
   }
 
   return <><PageTitle eyebrow="COLLECTOR MODE" title="Today's pickups" body={myPos ? "Sorted by distance from your current location." : "Accept nearby requests and keep every collection moving."} /><section className="collectorSummary"><Stat icon={Package} value={available.length} label="Available" /><Stat icon={Truck} value={mine.length} label="My pickups" /><Stat icon={Recycle} value={`${kg.toFixed(1)} kg`} label="Verified total" /><Stat icon={Coins} value={myPoints} label="Points earned" /></section>
-    <React.Suspense fallback={<div className="mapShell mapLoading">Loading map…</div>}><PickupsMap points={available.filter(r => r.latitude != null && r.longitude != null).map(r => ({ lat: r.latitude, lng: r.longitude, popupHtml: `<strong>${r.material_type}</strong><br/>${r.pickup_location} · ${r.estimated_weight_kg} kg` }))} myPos={myPos} myPopupHtml="Your location" /></React.Suspense>
+    <button type="button" className="locateButton" onClick={locate} disabled={locating}>{locating ? 'Getting your location…' : myPos ? 'Refresh my location' : 'Use my location to find nearby pickups'}</button>
+    {locateError && <div className="authMessage authError" role="status">{locateError}</div>}
+    <React.Suspense fallback={<div className="mapShell mapLoading">Loading map…</div>}><PickupsMap points={available.filter(r => r.latitude != null && r.longitude != null).map(r => ({ lat: r.latitude, lng: r.longitude, popupText: `${r.material_type}\n${r.pickup_location} · ${r.estimated_weight_kg} kg` }))} myPos={myPos} myPopupText="Your location" /></React.Suspense>
     <section className="sectionHead"><div><span className="eyebrow">QUEUE</span><h2>Available nearby</h2></div></section>{available.length ? <div className="requestList">{available.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} distanceKm={withDistance(r)} />)}</div> : <EmptyState title="Nothing nearby" body="New collection requests will appear here." />}{mine.length > 0 && <><section className="sectionHead"><div><span className="eyebrow">IN PROGRESS</span><h2>My pickups</h2></div></section><div className="requestList">{mine.map(r => <RequestCard key={r.id} request={r} action={actionFor(r)} pointsRate={COLLECTOR_RATE_PER_KG} />)}</div></>}
     {completed.length > 0 && <><section className="sectionHead"><div><span className="eyebrow">HISTORY</span><h2>Completed collections</h2></div></section><div className="requestList">{completed.map(r => <RequestCard key={r.id} request={r} pointsRate={COLLECTOR_RATE_PER_KG} compact />)}</div></>}</>
+
 }
 
 function AdminScreen({ requests, verify, recordReceipt }) {
@@ -597,7 +636,7 @@ function AdminScreen({ requests, verify, recordReceipt }) {
       ))}</div>
     ) : <EmptyState icon={Gift} title="No pending redemptions" body="Requests to redeem points for rewards will appear here." />}
 
-    <section className="sectionHead"><div><span className="eyebrow">ACTION REQUIRED</span><h2>Verification queue</h2></div><span className="queueCount">{collected.length} waiting</span></section>{collected.length ? <div className="requestList">{collected.map(r => <RequestCard key={r.id} request={r} action={<button className="primary small" onClick={() => verify(r.id)}>Verify + reward</button>} />)}</div> : <EmptyState icon={ShieldCheck} title="Queue is clear" body="Collected pickups will appear here for verification." />}<section className="sectionHead activityHead"><div><span className="eyebrow">RECENT</span><h2>All activity</h2></div></section><div className="requestList">{requests.map(r => <RequestCard key={r.id} request={r} compact action={r.status === 'VERIFIED' && !r.solana_tx_signature ? <button className="secondary small" onClick={() => recordReceipt(r.id)}>Retry Solana receipt</button> : null} />)}</div></>
+    <section className="sectionHead"><div><span className="eyebrow">ACTION REQUIRED</span><h2>Verification queue</h2></div><span className="queueCount">{collected.length} waiting</span></section>{collected.length ? <div className="requestList">{collected.map(r => <RequestCard key={r.id} request={r} action={<button className="primary small" onClick={() => verify(r.id)}>Verify + reward</button>} />)}</div> : <EmptyState icon={ShieldCheck} title="Queue is clear" body="Collected pickups will appear here for verification." />}<section className="sectionHead activityHead"><div><span className="eyebrow">RECENT</span><h2>All activity</h2></div></section><div className="requestList">{requests.map(r => <RequestCard key={r.id} request={r} compact action={r.status === 'VERIFIED' && !r.solana_tx_signature && !r.solana_receipt_address ? <button className="secondary small" onClick={() => recordReceipt(r.id)}>Retry Solana receipt</button> : null} />)}</div></>
 }
 
 function AppShell({ onExit, profile, email, userId, onSaveName, refreshProfile = async () => {}, preview = false }) {
@@ -652,7 +691,27 @@ function AppShell({ onExit, profile, email, userId, onSaveName, refreshProfile =
   const accept = async (id, coords) => { const { error } = await supabase.rpc('accept_pickup', { p_id: id, p_lat: coords?.lat ?? null, p_lng: coords?.lng ?? null }); setNotice(error ? error.message : 'Pickup accepted.'); reload() }
   const startOnTheWay = async (id, coords) => { const { error } = await supabase.rpc('start_on_the_way', { p_id: id, p_lat: coords?.lat ?? null, p_lng: coords?.lng ?? null }); setNotice(error ? error.message : 'Marked as on the way.'); reload() }
   const collect = async (id, weight) => { const { error } = await supabase.rpc('collect_pickup', { p_id: id, p_weight: Number(weight) }); setNotice(error ? error.message : 'Collection marked as collected.'); reload() }
-  const recordReceipt = async id => { const { data, error } = await supabase.functions.invoke('record-recycling-receipt', { body: { pickup_id: id } }); if (error || data?.error) { setNotice('Receipt is still pending. Check the Edge Function logs and retry.'); } else { setNotice('Solana recycling receipt confirmed.'); } reload() }; const verify = async id => { const { error } = await supabase.rpc('verify_pickup', { p_id: id }); if (error) { setNotice(error.message); reload(); return } await recordReceipt(id) }
+  const recordReceipt = async id => {
+    try {
+      const { data, error } = await supabase.functions.invoke('record-recycling-receipt', { body: { pickup_id: id } })
+      setNotice(error || data?.error ? 'Weight verification is saved. Solana receipt is pending; retry from All activity.' : 'Solana recycling receipt confirmed.')
+    } catch {
+      setNotice('Weight verification is saved. Solana receipt is pending; retry from All activity.')
+    } finally { reload() }
+  }
+  const verify = async id => {
+    const { error } = await supabase.rpc('verify_pickup', { p_id: id })
+    if (error) { setNotice(error.message); return }
+    setNotice('Weight verified and points issued.')
+    void recordReceipt(id)
+    reload()
+    // Fire-and-forget: anchoring onchain is a bonus proof layer, not something
+    // that should block or fail the actual verification if Solana is slow/down.
+    supabase.functions.invoke('anchor-onchain', { body: { pickup_id: id } })
+      .then(({ error: anchorErr }) => { if (!anchorErr) reload() })
+      .catch(() => {})
+  }
+
   const redeem = async reward => {
     if (preview || !supabase) throw new Error('Preview only. No reward has been requested.')
     const storageKey = `bottleup-reward:${userId}:${reward.id}`

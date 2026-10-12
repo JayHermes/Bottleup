@@ -48,3 +48,9 @@ Photos use the private Supabase `pickup-photos` bucket, not Firebase. The storag
 Users select JPEG, PNG or WebP images up to 8 MB. The browser re-encodes to JPEG, strips metadata and limits dimensions to 1600 pixels. Unsupported/undecodable images produce an error instead of uploading the original. Unique object paths live under the authenticated user's ID. Request cards retrieve five-minute signed URLs on demand. The owner, assigned collector and admins can read attached photos; no public reads are allowed. Failed pickup inserts attempt to remove the unlinked uploaded object, with an explicit message if cleanup fails.
 
 The policy test `bottle-up-mvp/tests/pickup-photo-storage.test.mjs` uses the same PGlite setup as the bank-details test. A live signed-in Storage API upload, pickup insert and participant download remain an end-to-end release check; the development dashboard preview intentionally cannot perform uploads.
+
+### Pickup maps and location
+
+Maps use Leaflet and OpenStreetMap public tiles, with visible attribution and no API key. Public tiles require an internet connection and follow https://operations.osmfoundation.org/policies/tiles/; reassess the tile provider as traffic grows.
+
+GPS capture requires HTTPS (or localhost) and browser location permission. Users can select a pickup pin on the map if GPS is unavailable, while retaining their written landmark. Without a pin, the written location is saved but cannot be plotted or sorted by distance. Collectors can capture or refresh their position explicitly. Tracking displays the last location shared when accepting or starting a pickup, rather than continuous tracking.
