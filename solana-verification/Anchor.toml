@@ -5,16 +5,19 @@ anchor_version = "0.31.1"
 resolution = true
 skip-lint = false
 
-[programs.localnet]
-bottle_up_receipts = "11111111111111111111111111111111"
-
 [programs.devnet]
-bottle_up_receipts = "11111111111111111111111111111111"
+bottle_up_receipts = "F8VR44MDbcA6ZFNaz5UerqZLnbVwT7DPKuqNaxLPd6C"
+
+[programs.localnet]
+bottle_up_receipts = "F8VR44MDbcA6ZFNaz5UerqZLnbVwT7DPKuqNaxLPd6C"
+
+[registry]
+url = "https://api.apr.dev"
 
 [provider]
 cluster = "devnet"
-wallet = "~/.config/solana/id.json"
+wallet = "wallets/devnet-authority.json"
 
 [scripts]
-test = "yarn ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
-initialize = "yarn ts-mocha -p ./tsconfig.json -t 1000000 scripts/initialize.ts"
+initialize = "node scripts/initialize.ts"
+test = "npx ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

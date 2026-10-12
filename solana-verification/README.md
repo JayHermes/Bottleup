@@ -1,60 +1,60 @@
-# Bottle Up Solana recycling receipts (Devnet first)
+# BottleUp Solana receipts (Devnet)
 
-This is an additive integration for the existing React/Vite + Supabase app. The existing admin verification remains the source of truth; only rows already in `VERIFIED` state may be written on-chain.
+BottleUp records one receipt per verified pickup at a deterministic PDA: `["receipt", sha256(pickup_uuid)]`. Receipts hold the pickup hash, verified grams, material code, evidence-reference hash, timestamp, and verifier. Addresses, names, photographs, and contact details stay off-chain. A receipt proves an authorized attestation, not independent proof of physical recycling.
 
-## Receipt design
+## Deployment identity
 
-- One PDA per pickup: `["receipt", sha256(pickup_request_uuid)]`. The program's `init` makes duplicate receipts impossible.
-- On-chain: pickup UUID hash, actual weight in grams, material code, optional evidence hash, verification timestamp, and verifier public key.
-- Off-chain: names, contact information, pickup address, photos, and other personal information stay in Supabase.
-- Network: Solana Devnet during testing. Do not use mainnet until tests, access controls, retries, and operational key custody have been reviewed.
+- Program: `F8VR44MDbcA6ZFNaz5UerqZLnbVwT7DPKuqNaxLPd6C`
+- Authority: `5a65byZRjdDsn3PWZW7a9TeuEVEwZSpLdh1PaPH2kqaF`
+- Network: Devnet only. The Edge Function checks the network genesis hash.
+- Supabase project: `sdubpqggmhadoqmjrgaf` (BottleUP).
+- Function: `record-recycling-receipt`.
 
-Material codes: 1 = PET Bottles, 2 = Plastic Containers, 3 = HDPE Plastic, 4 = Mixed Plastic, 255 = Other/unknown.
+Material codes: PET Bottles = 1; Plastic Containers = 2; HDPE Plastic = 3; Mixed Plastic = 4; unknown = 255.
 
-## Prerequisites
+## Reproduce builds and tests
 
-Install Rust, Solana CLI, Anchor CLI 0.31.1, Node.js, and Yarn. See https://solana.com/docs/intro/quick-start/build-first-program.
+Use Anchor CLI 0.31.1, the Solana CLI, Rust stable, and Node.js 24. Official installation instructions: https://solana.com/docs/intro/installation.
 
-## Build and deploy
-
-From this directory:
-
-1. Generate a deployer wallet if needed: `solana-keygen new`.
-2. Point CLI at Devnet: `solana config set --url devnet`.
-3. Obtain Devnet SOL: `solana airdrop 2`.
-4. Install Anchor dependencies if prompted: `anchor --version` should report 0.31.1.
-5. Run `anchor build` once to generate the program keypair under `target/deploy` (the first build may require the placeholder ID to be synced; if so, run `anchor keys sync` and rebuild).
-6. Run `anchor keys sync` to make the program ID in Anchor.toml and lib.rs match the generated program keypair, then run `anchor build` again.
-7. Run `anchor deploy --provider.cluster devnet`.
-8. Initialize the config exactly once, using the deployer wallet that should control receipts. Do not let an untrusted wallet initialize first: run `anchor run initialize`. The script refuses to claim an already-initialized config owned by a different wallet.
-
-Keep the deployer keypair private. Never commit it to GitHub.
-
-## Database migration
-
-Apply `migrations/202610120001_add_solana_receipt_fields.sql` to the correct Supabase project after confirming you have a backup and are targeting the intended environment. This migration only adds columns/indexes; it does not bootstrap or reset the database.
-
-## Important status
-
-This scaffold includes the on-chain program, database tracking schema, Edge Function, and app receipt links/retry controls. It has not been deployed or tested end-to-end on Devnet. Do not claim live integration until the program, migration, and function are configured, tested, and deployed. A Solana transaction proves an authorized verifier wrote the record; it does not independently prove that the physical material was recycled.
-
-## Supabase Edge Function setup
-
-The function is at `bottle-up-mvp/supabase/functions/record-recycling-receipt/index.ts`. It requires an authenticated Bottle Up admin and only accepts pickup rows whose status is already `VERIFIED`.
-
-After deploying the Anchor program and applying the migration, set these Supabase Edge Function secrets in the correct project:
-
-- `SOLANA_RPC_URL`: Devnet RPC endpoint
-- `SOLANA_RECEIPT_PROGRAM_ID`: deployed program ID
-- `BOTTLEUP_SOLANA_AUTHORITY_SECRET`: JSON array from the authority keypair secret bytes. Store only in Supabase secrets; never commit it.
-- Supabase supplies `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` to Edge Functions in the normal environment.
-
-From the app's Supabase project, deploy with the Supabase CLI, for example:
 ```sh
-supabase functions deploy record-recycling-receipt
+cd solana-verification
+npm ci
+npm run build
+npm run typecheck
+npm test
 ```
-Configure the secrets using `supabase secrets set` or the Supabase dashboard. Do not paste secret values into chat or source control.
 
-The admin verification action requests the receipt in the background after `verify_pickup` succeeds, preserving the existing `anchor-onchain` request and never delaying point issuance. Verified pickups without a saved transaction signature show a retry action. The receipt link is shown on verified pickup cards when a transaction is recorded.
+The workspace manifest, IDL feature, dependency lockfiles, and Node typings are included. The build uses stable Rust for IDL generation. Tests default to a fresh local validator, where airdrops are local test funds. They cover initialization, authority restrictions, recording, duplicate prevention, invalid weight, and unauthorized signers.
 
-Before live use, verify the app's actual Supabase project, install/build the Anchor program, initialize the on-chain config with the same authority key used by the Edge Function, and complete a Devnet end-to-end test. The Edge Function currently uses the Devnet Explorer URL in the UI.
+`Anchor.toml` points at the deployment wallet in `wallets/devnet-authority.json`. Private wallets and `target/` are ignored by Git. Securely back up both the authority wallet and `target/deploy/bottle_up_receipts-keypair.json`; do not paste their contents into chat or source control. This program permits only its compiled deployment authority to initialize config. Reusing it with a new wallet requires explicitly updating that public authority in Rust and rebuilding.
+
+The installation used for this checkout lives under `/private/tmp/bottleup-tools`. If necessary, set `PATH` to include its root, `solana-release/bin`, and `cargo/bin`, set `CARGO_HOME` to its `cargo` directory, and set `RUSTUP_HOME` to its `rustup` directory. These temporary tools may need reinstalling after system cleanup.
+
+## Deploy and initialize
+
+Check the wallet's Devnet balance before deploying. Free test SOL is available from https://faucet.solana.com. Never fund this test flow with real SOL.
+
+```sh
+solana program deploy target/deploy/bottle_up_receipts.so \
+  --program-id target/deploy/bottle_up_receipts-keypair.json \
+  --keypair wallets/devnet-authority.json --url devnet --use-rpc
+npm run initialize
+```
+
+Initialization is idempotent for the correct authority and refuses another authority's configuration. The upgrade authority remains under the deployment wallet; the program is not marked immutable.
+
+## Supabase integration
+
+The additive migration at `migrations/202610120001_add_solana_receipt_fields.sql` is applied to BottleUP. It adds receipt address/signature/status/error/timestamp fields and unique indexes without resetting pickups or points. Client roles cannot edit these proof fields.
+
+The deployed Edge Function authenticates the session and checks the persisted admin role before signing. It requires a VERIFIED pickup with valid weight and timestamp. It checks config ownership and authority, confirms transaction success, then validates the exact resulting receipt. Retries validate and reuse an existing receipt and recover its transaction signature from the chain. Errors retain verification/points and leave a retryable receipt status. The function also updates older `onchain_*` fields for UI compatibility.
+
+Configured server secrets are `SOLANA_RPC_URL`, `SOLANA_RECEIPT_PROGRAM_ID`, and `BOTTLEUP_SOLANA_AUTHORITY_SECRET`. Supabase supplies its own database/API credentials. Keep JWT verification enabled. The signer is never bundled into the frontend.
+
+## Live test
+
+`node scripts/live-receipt-test.mjs` uses two temporary synthetic accounts, a short-lived admin role, and a labelled pickup fixture. It deliberately does not issue points or claim real recycling. It checks anonymous/user/unverified rejection, receipt creation, retry identity, database persistence, and recovery after a missing database signature. It removes only those fixtures afterward, with a recovery manifest if cleanup fails.
+
+Run live tests only with explicit project-owner approval. Set `BOTTLEUP_TEST_KEYS_FILE` to a private JSON file produced by `supabase projects api-keys --output json`. Keys and passwords are not printed or committed. `--configuration-only` checks authenticated integration before program deployment and expects the undeployed program to fail, rather than claiming a completed receipt.
+
+Current evidence and remaining submission work: [submission readiness](../docs/submission-readiness.md).

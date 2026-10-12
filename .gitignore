@@ -6,3 +6,9 @@
 **/dist/
 
 **/supabase/.temp/
+
+# Solana build artifacts and private wallets
+solana-verification/target/
+solana-verification/.anchor/
+**/*-keypair.json
+**/wallets/

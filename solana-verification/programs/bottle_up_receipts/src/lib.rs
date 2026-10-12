@@ -1,7 +1,10 @@
 use anchor_lang::prelude::*;
 
-// Replace this placeholder by running: anchor keys sync
-declare_id!("11111111111111111111111111111111");
+// Devnet deployment ID; synchronized with the private program keypair.
+declare_id!("F8VR44MDbcA6ZFNaz5UerqZLnbVwT7DPKuqNaxLPd6C");
+
+// Only this deployment wallet can initialize the receipt authority.
+const INITIAL_AUTHORITY: Pubkey = Pubkey::new_from_array([67,232,168,92,74,242,70,34,196,75,220,82,79,233,29,103,125,20,80,93,240,251,4,4,80,156,179,206,16,39,180,16]);
 
 #[program]
 pub mod bottle_up_receipts {
@@ -9,6 +12,7 @@ pub mod bottle_up_receipts {
 
     /// Run once immediately after deployment. The signer becomes the receipt authority.
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+        require_keys_eq!(ctx.accounts.authority.key(), INITIAL_AUTHORITY, ReceiptError::InvalidAuthority);
         let config = &mut ctx.accounts.config;
         config.authority = ctx.accounts.authority.key();
         config.bump = ctx.bumps.config;
@@ -118,6 +122,8 @@ pub struct ReceiptRecorded {
 
 #[error_code]
 pub enum ReceiptError {
+    #[msg("Only the deployment authority may initialize this program.")]
+    InvalidAuthority,
     #[msg("Verified weight must be greater than zero.")]
     InvalidWeight,
     #[msg("Verification timestamp must be a positive Unix timestamp.")]

@@ -265,6 +265,8 @@ function Stat({ icon: Icon, value, label }) { return <div className="miniStat"><
 
 function ReceiptModal({ request, earnedPoints, onClose }) {
   const [copied, setCopied] = useState(false)
+  const receiptSignature = request.solana_tx_signature || request.onchain_tx_signature
+  const receiptAddress = request.solana_receipt_address || request.onchain_record_account
   const copyHash = () => { navigator.clipboard?.writeText(request.verification_hash || ''); setCopied(true); setTimeout(() => setCopied(false), 1500) }
   return <div className="authGate" onClick={onClose}>
     <div className="authCard receiptCard" onClick={e => e.stopPropagation()}>
@@ -284,11 +286,11 @@ function ReceiptModal({ request, earnedPoints, onClose }) {
           <div className="receiptHashRow"><code>{request.verification_hash}</code><button onClick={copyHash}>{copied ? 'Copied' : 'Copy'}</button></div>
         </div>
       )}
-      {(request.solana_tx_signature || request.onchain_tx_signature) ? (
+      {receiptSignature || receiptAddress ? (
         <>
-          <a className="primary" style={{ textAlign: 'center' }} href={`https://explorer.solana.com/tx/${(request.solana_tx_signature || request.onchain_tx_signature)}?cluster=devnet`} target="_blank" rel="noreferrer">View proof on Solana Explorer <ArrowRight size={16} /></a>
-          {(request.solana_receipt_address || request.onchain_record_account) && (
-            <a className="textButton" style={{ textAlign: 'center', marginTop: 8 }} href={`https://explorer.solana.com/address/${(request.solana_receipt_address || request.onchain_record_account)}?cluster=devnet`} target="_blank" rel="noreferrer">View permanent record account <ArrowRight size={14} /></a>
+          <a className="primary" style={{ textAlign: 'center' }} href={receiptSignature ? `https://explorer.solana.com/tx/${receiptSignature}?cluster=devnet` : `https://explorer.solana.com/address/${receiptAddress}?cluster=devnet`} target="_blank" rel="noreferrer">View proof on Solana Explorer <ArrowRight size={16} /></a>
+          {receiptAddress && (
+            <a className="textButton" style={{ textAlign: 'center', marginTop: 8 }} href={`https://explorer.solana.com/address/${receiptAddress}?cluster=devnet`} target="_blank" rel="noreferrer">View permanent record account <ArrowRight size={14} /></a>
           )}
         </>
       ) : (
@@ -705,11 +707,7 @@ function AppShell({ onExit, profile, email, userId, onSaveName, refreshProfile =
     setNotice('Weight verified and points issued.')
     void recordReceipt(id)
     reload()
-    // Fire-and-forget: anchoring onchain is a bonus proof layer, not something
-    // that should block or fail the actual verification if Solana is slow/down.
-    supabase.functions.invoke('anchor-onchain', { body: { pickup_id: id } })
-      .then(({ error: anchorErr }) => { if (!anchorErr) reload() })
-      .catch(() => {})
+
   }
 
   const redeem = async reward => {

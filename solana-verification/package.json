@@ -2,12 +2,17 @@
   "name": "bottle-up-solana-verification",
   "private": true,
   "scripts": {
-    "build": "anchor build",
-    "test": "anchor test"
+    "build": "ANCHOR_IDL_BUILD_TOOLCHAIN=stable anchor build",
+    "test": "anchor test --provider.cluster localnet",
+    "typecheck": "tsc --noEmit",
+    "initialize": "anchor run initialize"
   },
   "devDependencies": {
     "@coral-xyz/anchor": "0.31.1",
     "@solana/web3.js": "^1.98.0",
+    "@types/chai": "4.3.20",
+    "@types/mocha": "10.0.10",
+    "@types/node": "22.10.2",
     "chai": "^4.5.0",
     "mocha": "^10.8.2",
     "ts-mocha": "^10.0.0",

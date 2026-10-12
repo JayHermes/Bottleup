@@ -1,10 +1,11 @@
+import type { BottleUpReceipts } from "../target/types/bottle_up_receipts";
 import * as anchor from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 
 async function main() {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
-  const program = anchor.workspace.BottleUpReceipts as anchor.Program;
+  const program = anchor.workspace.BottleUpReceipts as anchor.Program<BottleUpReceipts>;
   const [config] = PublicKey.findProgramAddressSync(
     [Buffer.from("config")],
     program.programId
@@ -22,10 +23,12 @@ async function main() {
     return;
   }
 
-  await program.methods.initialize().accounts({
+  const signature = await program.methods.initialize().accountsStrict({
     authority: provider.wallet.publicKey,
     config,
+    systemProgram: SystemProgram.programId,
   }).rpc();
+  console.log("Initialization transaction:", signature);
   console.log("Initialized Bottle Up receipt authority:", provider.wallet.publicKey.toBase58());
   console.log("Config PDA:", config.toBase58());
 }

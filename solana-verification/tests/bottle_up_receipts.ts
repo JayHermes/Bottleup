@@ -1,30 +1,44 @@
+import { createHash } from "node:crypto";
+import type { BottleUpReceipts } from "../target/types/bottle_up_receipts";
 import * as anchor from "@coral-xyz/anchor";
 import { assert } from "chai";
-import { PublicKey, SystemProgram } from "@solana/web3.js";
+import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 
 describe("bottle_up_receipts", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
-  const program = anchor.workspace.BottleUpReceipts as anchor.Program;
+  const program = anchor.workspace.BottleUpReceipts as anchor.Program<BottleUpReceipts>;
   const authority = provider.wallet.publicKey;
   const [config] = PublicKey.findProgramAddressSync(
     [Buffer.from("config")],
     program.programId
   );
 
+  it("rejects an unauthorized initializer", async () => {
+    const outsider = Keypair.generate();
+    await provider.connection.confirmTransaction(await provider.connection.requestAirdrop(outsider.publicKey, 1_000_000_000), "confirmed");
+    try {
+      await program.methods.initialize().accountsStrict({ authority: outsider.publicKey, config, systemProgram: SystemProgram.programId }).signers([outsider]).rpc();
+      assert.fail("unauthorized initialization succeeded");
+    } catch (error) {
+      assert.include(String(error), "InvalidAuthority");
+    }
+    assert.isNull(await provider.connection.getAccountInfo(config));
+  });
+
   it("initializes the authority and records one receipt per pickup", async () => {
     // Use a fresh local validator for this test; initialize is intentionally one-time.
-    await program.methods.initialize().accounts({
+    await program.methods.initialize().accountsStrict({
       authority,
       config,
       systemProgram: SystemProgram.programId,
     }).rpc();
 
     const pickupHash = Array.from(
-      anchor.utils.sha256.hash("bottle-up-test-pickup-001")
+      createHash("sha256").update("bottle-up-test-pickup-001").digest()
     );
     const evidenceHash = Array.from(
-      anchor.utils.sha256.hash("bottle-up-test-evidence-001")
+      createHash("sha256").update("bottle-up-test-evidence-001").digest()
     );
     const [receipt] = PublicKey.findProgramAddressSync(
       [Buffer.from("receipt"), Buffer.from(pickupHash)],
@@ -37,7 +51,7 @@ describe("bottle_up_receipts", () => {
       1,                    // PET bottles
       evidenceHash,
       new anchor.BN(Math.floor(Date.now() / 1000))
-    ).accounts({
+    ).accountsStrict({
       authority,
       config,
       receipt,
@@ -57,7 +71,7 @@ describe("bottle_up_receipts", () => {
         1,
         evidenceHash,
         new anchor.BN(Math.floor(Date.now() / 1000))
-      ).accounts({
+      ).accountsStrict({
         authority,
         config,
         receipt,
@@ -68,4 +82,22 @@ describe("bottle_up_receipts", () => {
     }
     assert.isTrue(duplicateRejected, "duplicate receipt must be rejected");
   });
+  it("rejects zero weight and unauthorized receipt signers", async () => {
+    const pickupHash = Array.from(createHash("sha256").update("invalid-pickup").digest());
+    const [receipt] = PublicKey.findProgramAddressSync([Buffer.from("receipt"), Buffer.from(pickupHash)], program.programId);
+    const evidence = Array(32).fill(0);
+    try {
+      await program.methods.recordReceipt(pickupHash, new anchor.BN(0), 1, evidence, new anchor.BN(1)).accountsStrict({ authority, config, receipt, systemProgram: SystemProgram.programId }).rpc();
+      assert.fail("zero-weight receipt succeeded");
+    } catch (error) { assert.include(String(error), "InvalidWeight"); }
+    assert.isNull(await provider.connection.getAccountInfo(receipt));
+    const outsider = Keypair.generate();
+    await provider.connection.confirmTransaction(await provider.connection.requestAirdrop(outsider.publicKey, 1_000_000_000), "confirmed");
+    try {
+      await program.methods.recordReceipt(pickupHash, new anchor.BN(1000), 1, evidence, new anchor.BN(1)).accountsStrict({ authority: outsider.publicKey, config, receipt, systemProgram: SystemProgram.programId }).signers([outsider]).rpc();
+      assert.fail("unauthorized signer succeeded");
+    } catch (error) { assert.include(String(error), "ConstraintHasOne"); }
+    assert.isNull(await provider.connection.getAccountInfo(receipt));
+  });
+
 });
