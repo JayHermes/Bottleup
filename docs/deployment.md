@@ -57,3 +57,11 @@ Inspect failed receipt status before retrying. Verification and points remain va
 | Points differ from history | Use the reconciliation query in the points guide; do not edit balances or ledger entries manually |
 
 OpenStreetMap public tiles need visible attribution and must follow the [tile usage policy](https://operations.osmfoundation.org/policies/tiles/). Review the provider before substantially increasing traffic.
+
+## Verification helper ambiguity fix — 12 October 2026
+
+The live project contained six- and seven-argument `bottleup_private.post_points` overloads with overlapping defaults. Calls from verification, redemption, and refund could fail with “function … is not unique.” The additive `20261012150615_disambiguate_post_points.sql` migration renames the legacy seven-argument helper to `post_points_with_rate`, retaining its body, ownership, and permissions. Current application callers continue using the six-argument helper. Fresh databases need no rename.
+
+The migration was applied to BottleUP. A transaction-scoped live test under the authenticated admin role verified a collected pickup, credited the user and collector at the live configured rates, and confirmed that a repeat verification did not credit twice. All fixtures were rolled back. The local regression test also covers redemption/refund and migration replay.
+
+The live project currently uses 70 user points and 25 collector points per kilogram, whereas the original bootstrap and earlier product documentation describe 100 user points per kilogram. This repair preserves deployed rates. Reconcile product copy and the reproducible schema with the team's chosen rate in a separate change.

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test tests/bank-accounts.test.mjs tests/pickup-photo-storage.test.mjs tests/points.test.mjs tests/location.test.mjs tests/solana-receipt-schema.test.mjs tests/solana-receipt-codec.test.mjs tests/solana-receipt-handler.test.mjs",
+    "test": "node --test tests/bank-accounts.test.mjs tests/pickup-photo-storage.test.mjs tests/points.test.mjs tests/location.test.mjs tests/solana-receipt-schema.test.mjs tests/solana-receipt-codec.test.mjs tests/solana-receipt-handler.test.mjs tests/points-overload.test.mjs",
     "test:concurrency": "POINTS_CONCURRENCY=1 node --test tests/points-concurrency.test.mjs"
   },
   "dependencies": {
