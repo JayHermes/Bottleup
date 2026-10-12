@@ -652,7 +652,7 @@ function AppShell({ onExit, profile, email, userId, onSaveName, refreshProfile =
   const accept = async (id, coords) => { const { error } = await supabase.rpc('accept_pickup', { p_id: id, p_lat: coords?.lat ?? null, p_lng: coords?.lng ?? null }); setNotice(error ? error.message : 'Pickup accepted.'); reload() }
   const startOnTheWay = async (id, coords) => { const { error } = await supabase.rpc('start_on_the_way', { p_id: id, p_lat: coords?.lat ?? null, p_lng: coords?.lng ?? null }); setNotice(error ? error.message : 'Marked as on the way.'); reload() }
   const collect = async (id, weight) => { const { error } = await supabase.rpc('collect_pickup', { p_id: id, p_weight: Number(weight) }); setNotice(error ? error.message : 'Collection marked as collected.'); reload() }
-  const verify = async id => { const { error } = await supabase.rpc('verify_pickup', { p_id: id }); setNotice(error ? error.message : 'Weight verified and points issued.'); reload() }
+  const verify = async id => { const { error } = await supabase.rpc('verify_pickup', { p_id: id }); if (error) { setNotice(error.message); reload(); return } const { data: receipt, error: receiptError } = await supabase.functions.invoke('record-recycling-receipt', { body: { pickup_id: id } }); if (receiptError || receipt?.error) { setNotice('Weight verified and points issued. Solana receipt is pending; retry receipt recording from the admin workflow.'); } else { setNotice('Weight verified and points issued. Solana receipt recorded.'); } reload() }
   const redeem = async reward => {
     if (preview || !supabase) throw new Error('Preview only. No reward has been requested.')
     const storageKey = `bottleup-reward:${userId}:${reward.id}`
