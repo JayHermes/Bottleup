@@ -38,5 +38,16 @@
   "program_deployment_signature": "5fj5Yk5H1SuQoWwbXEZLUNEsYin841g7iVNeDs4PSgAn1aTZfZP4PifubzND1eHSGibQroQR5tYLuyw8gFDMhmyc",
   "initialization_signature": "2s7HyRqnrSMaZtK7pNTq7yU96WM1siEnhJqbbDUPuyiSwkVr6wsmjuK1vBBJnJGeu6tRn2yj5M4bPXhs4JbYhJBu",
   "config_pda": "7emFSmisA1HEPKZte27AvWr4FuycSnKZNfLYg5f9P9de",
-  "binary_sha256": "201bea60a08faef988400cd399b191c895f31e4e10f1cc94b42d035977af016d"
+  "binary_sha256": "201bea60a08faef988400cd399b191c895f31e4e10f1cc94b42d035977af016d",
+  "main_site_browser_checks": {
+    "url": "https://usebottleup.xyz",
+    "landing": "passed",
+    "sign_in": "passed",
+    "dashboard": "passed",
+    "map_tiles": "passed",
+    "manual_pin": "passed",
+    "account_cleanup": "passed",
+    "pickup_submitted": false,
+    "points_awarded": false
+  }
 }

@@ -27,7 +27,7 @@ Devnet deployment and initialization are complete. The live test created a confi
 
 ## Main website
 
-The submission URL is https://usebottleup.xyz (redirects to www). Its landing page and sign-in form were verified in the browser. The last successful production version remains accessible while the newer Vercel deployment is being retried. Private Vercel build logs cannot be read with the available account access.
+The submission URL is https://usebottleup.xyz (redirects to www). Its landing page, ordinary-user sign-in, dashboard, Leaflet/OpenStreetMap tile loading, and manual pickup-pin selection were verified in the browser. The disposable browser-test account was signed out and removed. No pickup was submitted or points issued during that browser test. The last successful production version remains accessible while the newer Vercel deployment is being retried. Private Vercel build logs cannot be read with the available account access.
 
 A separate configured fallback is deployed at https://bottleup-submission.sacredtiger3.chatgpt.site. It stays owner-private at the user's request and is not the submission URL.
 
@@ -47,7 +47,7 @@ These account details, videos, and the actual submission have not been verified 
 
 ## Other release checks
 
-- Real phone GPS on HTTPS and manual pickup-pin selection need a device check.
+- Manual pickup-pin selection passed on the main site. Real phone GPS still needs a device check.
 - Signed-in photo upload/read and normal user→collector→admin flow need a live demo check. Their database/policy behavior is covered by automated tests.
 - Cash payouts are not implemented; reward fulfilment is manual.
 - Supabase advisors show a mutable search path on `notify_pickup_status_change`, existing authenticated role-helper warnings, two locked unused tables without policies, and disabled leaked-password protection. These are separate from the receipt migration; review them before a broader production release.
