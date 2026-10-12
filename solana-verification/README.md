@@ -37,3 +37,24 @@ Apply `migrations/202610120001_add_solana_receipt_fields.sql` to the correct Sup
 ## Important status
 
 This commit contains the on-chain program and database tracking schema. It does not yet wire a Supabase Edge Function into the live admin verification action or display receipts in the UI. Do not claim live integration until those pieces are implemented, tested on Devnet, and deployed. A Solana transaction proves an authorized verifier wrote the record; it does not independently prove that the physical material was recycled.
+
+## Supabase Edge Function setup
+
+The function is at `bottle-up-mvp/supabase/functions/record-recycling-receipt/index.ts`. It requires an authenticated Bottle Up admin and only accepts pickup rows whose status is already `VERIFIED`.
+
+After deploying the Anchor program and applying the migration, set these Supabase Edge Function secrets in the correct project:
+
+- `SOLANA_RPC_URL`: Devnet RPC endpoint
+- `SOLANA_RECEIPT_PROGRAM_ID`: deployed program ID
+- `BOTTLEUP_SOLANA_AUTHORITY_SECRET`: JSON array from the authority keypair secret bytes. Store only in Supabase secrets; never commit it.
+- Supabase supplies `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` to Edge Functions in the normal environment.
+
+From the app's Supabase project, deploy with the Supabase CLI, for example:
+```sh
+supabase functions deploy record-recycling-receipt
+```
+Configure the secrets using `supabase secrets set` or the Supabase dashboard. Do not paste secret values into chat or source control.
+
+The admin verification action now calls the function after `verify_pickup` succeeds. Verified pickups without a saved transaction signature show a retry action. The receipt link is shown on verified pickup cards when a transaction is recorded.
+
+Before live use, verify the app's actual Supabase project, install/build the Anchor program, initialize the on-chain config with the same authority key used by the Edge Function, and complete a Devnet end-to-end test. The Edge Function currently uses the Devnet Explorer URL in the UI.
