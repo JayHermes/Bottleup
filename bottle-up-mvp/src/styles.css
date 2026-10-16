@@ -267,5 +267,7 @@
 .receiptHashRow{display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 .receiptHashRow code{flex:1;font-size:10.5px;word-break:break-all;color:var(--green-bright)}
 .receiptHashRow button{flex:none;background:var(--surface-2);border:1px solid var(--line);color:var(--cream);border-radius:7px;padding:5px 9px;font-size:10.5px;cursor:pointer}
+.receiptShareRow{display:flex;gap:8px;margin-top:12px}
+.receiptShareRow button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px}
 .leaflet-popup-content{white-space:pre-line}
 .mapCanvas{z-index:0}

@@ -26,16 +26,19 @@ pub mod bottle_up_receipts {
         ctx: Context<RecordReceipt>,
         pickup_id_hash: [u8; 32],
         weight_grams: u64,
+        bottle_count: u32,
         material_code: u16,
         evidence_hash: [u8; 32],
         verified_at: i64,
     ) -> Result<()> {
         require!(weight_grams > 0, ReceiptError::InvalidWeight);
+        require!(bottle_count > 0, ReceiptError::InvalidBottleCount);
         require!(verified_at > 0, ReceiptError::InvalidTimestamp);
 
         let receipt = &mut ctx.accounts.receipt;
         receipt.pickup_id_hash = pickup_id_hash;
         receipt.weight_grams = weight_grams;
+        receipt.bottle_count = bottle_count;
         receipt.material_code = material_code;
         receipt.evidence_hash = evidence_hash;
         receipt.verified_at = verified_at;
@@ -46,6 +49,7 @@ pub mod bottle_up_receipts {
             receipt: receipt.key(),
             pickup_id_hash,
             weight_grams,
+            bottle_count,
             material_code,
             verified_at,
             verifier: receipt.verifier,
@@ -103,6 +107,7 @@ pub struct ReceiptConfig {
 pub struct RecyclingReceipt {
     pub pickup_id_hash: [u8; 32],
     pub weight_grams: u64,
+    pub bottle_count: u32,
     pub material_code: u16,
     pub evidence_hash: [u8; 32],
     pub verified_at: i64,
@@ -115,6 +120,7 @@ pub struct ReceiptRecorded {
     pub receipt: Pubkey,
     pub pickup_id_hash: [u8; 32],
     pub weight_grams: u64,
+    pub bottle_count: u32,
     pub material_code: u16,
     pub verified_at: i64,
     pub verifier: Pubkey,
@@ -126,6 +132,8 @@ pub enum ReceiptError {
     InvalidAuthority,
     #[msg("Verified weight must be greater than zero.")]
     InvalidWeight,
+    #[msg("Bottle count must be greater than zero.")]
+    InvalidBottleCount,
     #[msg("Verification timestamp must be a positive Unix timestamp.")]
     InvalidTimestamp,
 }

@@ -1,6 +1,6 @@
 # BottleUp Solana receipts (Devnet)
 
-BottleUp records one receipt per verified pickup at a deterministic PDA: `["receipt", sha256(pickup_uuid)]`. Receipts hold the pickup hash, verified grams, material code, evidence-reference hash, timestamp, and verifier. Addresses, names, photographs, and contact details stay off-chain. A receipt proves an authorized attestation, not independent proof of physical recycling.
+BottleUp records one receipt per verified pickup at a deterministic PDA: `["receipt", sha256(pickup_uuid)]`. Receipts hold the pickup hash, verified grams, bottle count (grams ÷ 1000 × 50, the same approximation used on BottleUp's pickup form, applied to the admin-verified weight), material code, evidence-reference hash, timestamp, and verifier. Addresses, names, photographs, and contact details stay off-chain. A receipt proves an authorized attestation, not independent proof of physical recycling.
 
 ## Deployment identity
 
@@ -48,6 +48,19 @@ solana program deploy target/deploy/bottle_up_receipts.so \
   --keypair wallets/devnet-authority.json --url devnet --use-rpc
 npm run initialize
 ```
+
+### Upgrading an existing deployment (e.g. adding `bottle_count`)
+
+The program is not marked immutable and the deployment wallet still holds the upgrade authority, so an account-layout change like adding `bottle_count` does not need a new program ID or a new `wallets/devnet-authority.json`. Rebuild and redeploy with the **same** command as a fresh deploy — `solana program deploy` upgrades in place when the program ID already exists on-chain:
+
+```sh
+anchor build
+solana program deploy target/deploy/bottle_up_receipts.so \
+  --program-id target/deploy/bottle_up_receipts-keypair.json \
+  --keypair wallets/devnet-authority.json --url devnet --use-rpc
+```
+
+`npm run initialize` does **not** need to run again — `ReceiptConfig` is unchanged, so the existing `config` PDA stays valid. Any receipt already recorded under the old 123-byte layout stays exactly as it was written (receipts are `init`-only, never updated); only receipts recorded *after* the upgrade get the new 127-byte layout with `bottle_count`. Since this project has not yet recorded a real (non-synthetic) receipt, there's no backward-compatibility concern to design around.
 
 Initialization is idempotent for the correct authority and refuses another authority's configuration. The upgrade authority remains under the deployment wallet; the program is not marked immutable.
 

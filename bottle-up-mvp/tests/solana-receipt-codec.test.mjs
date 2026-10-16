@@ -8,17 +8,19 @@ test('receipt encoding and recovery validate exact Anchor account layout', async
   const payload = await receiptPayload(pickup)
   assert.deepEqual(Buffer.from(payload.pickupHash), createHash('sha256').update(pickup.id).digest())
   assert.equal(payload.weightGrams, 5500n)
+  assert.equal(payload.bottleCount, 275) // 5.5kg * 50 bottles/kg
   const encoded = await encodeReceipt(payload)
-  assert.equal(encoded.length, 90)
+  assert.equal(encoded.length, 94)
   assert.deepEqual(Buffer.from(encoded.slice(0, 8)), createHash('sha256').update('global:record_receipt').digest().subarray(0, 8))
   assert.equal(new DataView(encoded.buffer).getBigUint64(40, true), 5500n)
+  assert.equal(new DataView(encoded.buffer).getUint32(48, true), 275)
   const authority = new Uint8Array(32).fill(7)
-  const receipt = new Uint8Array(123)
+  const receipt = new Uint8Array(127)
   receipt.set(encoded)
   receipt.set(await discriminator('account:RecyclingReceipt'))
-  receipt.set(authority, 90)
+  receipt.set(authority, 94)
   await validateReceiptAccount(receipt, payload, authority)
-  for (const offset of [0, 8, 40, 48, 50, 82, 90]) {
+  for (const offset of [0, 8, 40, 48, 52, 54, 86, 94]) {
     const altered = receipt.slice(); altered[offset] ^= 1
     await assert.rejects(validateReceiptAccount(altered, payload, authority), /does not match/)
   }

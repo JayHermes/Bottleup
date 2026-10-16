@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
-  ArrowRight, Bell, Camera, Check, ChevronRight, Coins, Gift, Home, Leaf,
-  MapPin, Package, Pencil, Recycle, ShieldCheck, Truck, UserRound, Users,
+  ArrowRight, Bell, Camera, Check, ChevronRight, Coins, Download, Gift, Home, Leaf,
+  MapPin, Package, Pencil, Recycle, Share, ShieldCheck, Truck, UserRound, Users,
   WalletCards, Weight, X
 } from './components/Icons.jsx'
 import './styles.css'
@@ -263,11 +263,120 @@ function StageTracker({ status }) {
 
 function Stat({ icon: Icon, value, label }) { return <div className="miniStat"><div className="miniIcon"><Icon size={16} /></div><strong>{value}</strong><span>{label}</span></div> }
 
+// Draws a shareable, certificate-style PNG of a receipt — for users who want
+// to post or forward proof of what they recycled, not just view it in-app.
+function drawReceiptCard({ request, earnedPoints, bottleCount, explorerUrl }) {
+  const canvas = document.createElement('canvas')
+  const W = 1080, H = 1350
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext('2d')
+  const roundRect = (x, y, w, h, r) => {
+    ctx.beginPath()
+    ctx.moveTo(x + r, y)
+    ctx.arcTo(x + w, y, x + w, y + h, r)
+    ctx.arcTo(x + w, y + h, x, y + h, r)
+    ctx.arcTo(x, y + h, x, y, r)
+    ctx.arcTo(x, y, x + w, y, r)
+    ctx.closePath()
+  }
+  // background
+  const bg = ctx.createRadialGradient(W * 0.75, 90, 40, W * 0.5, H * 0.3, 900)
+  bg.addColorStop(0, '#173a2c'); bg.addColorStop(1, '#0b1512')
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H)
+  // card
+  const pad = 56
+  roundRect(pad, pad, W - pad * 2, H - pad * 2, 36)
+  ctx.fillStyle = '#12221d'; ctx.fill()
+  ctx.lineWidth = 2; ctx.strokeStyle = '#2a473a'; ctx.stroke()
+
+  let y = pad + 86
+  // wordmark
+  ctx.fillStyle = '#26a65f'
+  roundRect(pad + 48, y - 34, 46, 46, 13); ctx.fill()
+  ctx.fillStyle = '#fff'; ctx.font = '800 24px sans-serif'; ctx.textBaseline = 'middle'
+  ctx.fillText('B', pad + 48 + 23 - 7, y - 10)
+  ctx.font = '800 26px sans-serif'; ctx.fillStyle = '#f5f3e9'
+  ctx.fillText('Bottle', pad + 110, y - 10)
+  const bw = ctx.measureText('Bottle').width
+  ctx.fillStyle = '#5be394'; ctx.fillText('Up', pad + 110 + bw, y - 10)
+
+  y += 70
+  ctx.fillStyle = '#f5f3e9'; ctx.font = '800 48px sans-serif'; ctx.textBaseline = 'alphabetic'
+  ctx.fillText('Recycling receipt', pad + 48, y)
+  y += 36
+  ctx.fillStyle = '#9bb0a6'; ctx.font = '400 22px sans-serif'
+  ctx.fillText('A verified record of this collection.', pad + 48, y)
+
+  y += 56
+  const rows = [
+    ['Material', String(request.material_type || '—')],
+    ['Bottles recycled', bottleCount ? `${bottleCount.toLocaleString()} bottles` : '—'],
+    ['Verified weight', `${request.actual_weight_kg} kg`],
+    ['Points awarded', `${earnedPoints.toLocaleString()} pts`],
+    ['Verified', request.verified_at ? new Date(request.verified_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : '—'],
+  ]
+  for (const [label, value] of rows) {
+    ctx.strokeStyle = '#2a473a'; ctx.lineWidth = 1.5
+    ctx.beginPath(); ctx.moveTo(pad + 48, y + 18); ctx.lineTo(W - pad - 48, y + 18); ctx.stroke()
+    ctx.fillStyle = '#9bb0a6'; ctx.font = '600 20px sans-serif'; ctx.fillText(label, pad + 48, y)
+    ctx.fillStyle = '#f5f3e9'; ctx.font = '800 24px sans-serif'; ctx.textAlign = 'right'
+    ctx.fillText(value, W - pad - 48, y); ctx.textAlign = 'left'
+    y += 70
+  }
+
+  y += 14
+  if (explorerUrl) {
+    roundRect(pad + 48, y, W - pad * 2 - 96, 92, 16)
+    ctx.fillStyle = 'rgba(38,166,95,.13)'; ctx.fill()
+    ctx.strokeStyle = 'rgba(91,227,148,.35)'; ctx.stroke()
+    ctx.fillStyle = '#5be394'; ctx.font = '800 22px sans-serif'; ctx.textBaseline = 'middle'
+    ctx.fillText('✓ Verified on-chain — Solana devnet', pad + 76, y + 36)
+    ctx.fillStyle = '#9bb0a6'; ctx.font = '400 18px sans-serif'
+    ctx.fillText(explorerUrl.replace('https://', ''), pad + 76, y + 68)
+    ctx.textBaseline = 'alphabetic'
+  } else {
+    ctx.fillStyle = '#9bb0a6'; ctx.font = '400 20px sans-serif'
+    ctx.fillText('On-chain proof is still being submitted.', pad + 48, y + 30)
+  }
+
+  ctx.fillStyle = '#6f887d'; ctx.font = '600 18px sans-serif'
+  ctx.fillText('usebottleup.xyz', pad + 48, H - pad - 40)
+
+  return canvas
+}
+
 function ReceiptModal({ request, earnedPoints, onClose }) {
   const [copied, setCopied] = useState(false)
+  const [shareNotice, setShareNotice] = useState('')
   const receiptSignature = request.solana_tx_signature || request.onchain_tx_signature
   const receiptAddress = request.solana_receipt_address || request.onchain_record_account
+  const explorerUrl = receiptSignature
+    ? `https://explorer.solana.com/tx/${receiptSignature}?cluster=devnet`
+    : receiptAddress ? `https://explorer.solana.com/address/${receiptAddress}?cluster=devnet` : null
+  const bottleCount = Math.round(Number(request.actual_weight_kg || 0) * BOTTLES_PER_KG)
   const copyHash = () => { navigator.clipboard?.writeText(request.verification_hash || ''); setCopied(true); setTimeout(() => setCopied(false), 1500) }
+
+  const shareReceipt = async () => {
+    const text = `I recycled ${bottleCount.toLocaleString()} bottles (${request.actual_weight_kg}kg of ${request.material_type}) through BottleUp and earned ${earnedPoints.toLocaleString()} points${explorerUrl ? ' — verified on-chain' : ''}.`
+    try {
+      if (navigator.share) { await navigator.share({ title: 'My BottleUp recycling receipt', text, url: explorerUrl || undefined }); return }
+    } catch { return }
+    try {
+      await navigator.clipboard.writeText(explorerUrl ? `${text} ${explorerUrl}` : text)
+      setShareNotice('Copied to clipboard'); setTimeout(() => setShareNotice(''), 1800)
+    } catch {
+      setShareNotice('Could not share — copy the details manually'); setTimeout(() => setShareNotice(''), 2200)
+    }
+  }
+
+  const downloadReceipt = () => {
+    const canvas = drawReceiptCard({ request, earnedPoints, bottleCount, explorerUrl })
+    const link = document.createElement('a')
+    link.download = `bottleup-receipt-${request.id.slice(0, 8)}.png`
+    link.href = canvas.toDataURL('image/png')
+    link.click()
+  }
+
   return <div className="authGate" onClick={onClose}>
     <div className="authCard receiptCard" onClick={e => e.stopPropagation()}>
       <button className="iconButton authBack" onClick={onClose}><X size={18} /></button>
@@ -276,6 +385,7 @@ function ReceiptModal({ request, earnedPoints, onClose }) {
       <p className="authCopy">A verified record of this collection.</p>
       <div className="receiptRows">
         <div><span>Material</span><strong>{request.material_type}</strong></div>
+        <div><span>Bottles recycled</span><strong>{bottleCount.toLocaleString()}</strong></div>
         <div><span>Verified weight</span><strong>{request.actual_weight_kg} kg</strong></div>
         <div><span>Points awarded</span><strong>{earnedPoints.toLocaleString()} pts</strong></div>
         <div><span>Verified</span><strong>{request.verified_at ? new Date(request.verified_at).toLocaleString() : '—'}</strong></div>
@@ -286,9 +396,9 @@ function ReceiptModal({ request, earnedPoints, onClose }) {
           <div className="receiptHashRow"><code>{request.verification_hash}</code><button onClick={copyHash}>{copied ? 'Copied' : 'Copy'}</button></div>
         </div>
       )}
-      {receiptSignature || receiptAddress ? (
+      {explorerUrl ? (
         <>
-          <a className="primary" style={{ textAlign: 'center' }} href={receiptSignature ? `https://explorer.solana.com/tx/${receiptSignature}?cluster=devnet` : `https://explorer.solana.com/address/${receiptAddress}?cluster=devnet`} target="_blank" rel="noreferrer">View proof on Solana Explorer <ArrowRight size={16} /></a>
+          <a className="primary" style={{ textAlign: 'center' }} href={explorerUrl} target="_blank" rel="noreferrer">View proof on Solana Explorer <ArrowRight size={16} /></a>
           {receiptAddress && (
             <a className="textButton" style={{ textAlign: 'center', marginTop: 8 }} href={`https://explorer.solana.com/address/${receiptAddress}?cluster=devnet`} target="_blank" rel="noreferrer">View permanent record account <ArrowRight size={14} /></a>
           )}
@@ -296,6 +406,11 @@ function ReceiptModal({ request, earnedPoints, onClose }) {
       ) : (
         <div className="authMessage">Onchain proof is still being submitted — check back shortly.</div>
       )}
+      <div className="receiptShareRow">
+        <button className="secondary" onClick={shareReceipt}><Share size={15} /> Share</button>
+        <button className="secondary" onClick={downloadReceipt}><Download size={15} /> Download image</button>
+      </div>
+      {shareNotice && <div className="authMessage" style={{ textAlign: 'center' }}>{shareNotice}</div>}
     </div>
   </div>
 }
