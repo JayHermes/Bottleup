@@ -322,6 +322,16 @@ async function drawReceiptCard({ request, earnedPoints, bottleCount, explorerUrl
   const bw = ctx.measureText('Bottle').width
   ctx.fillStyle = '#5be394'; ctx.fillText('Up', pad + 110 + bw, y - 10)
 
+  // status pill — same shape/colors as the "VERIFIED" badge on request cards
+  const pillLabel = 'V E R I F I E D'
+  ctx.font = `800 15px ${BODY_FONT}`
+  const pillTextW = ctx.measureText(pillLabel).width
+  const pillW = pillTextW + 34, pillH = 30
+  roundRect(W - pad - 48 - pillW, y - 34 + (46 - pillH) / 2, pillW, pillH, 99)
+  ctx.fillStyle = '#153c26'; ctx.fill()
+  ctx.fillStyle = '#5be394'
+  ctx.fillText(pillLabel, W - pad - 48 - pillW + 17, y - 10)
+
   y += 70
   ctx.fillStyle = '#f5f3e9'; ctx.font = `800 48px ${DISPLAY_FONT}`; ctx.textBaseline = 'alphabetic'
   ctx.fillText('Recycling receipt', pad + 48, y)
@@ -377,26 +387,46 @@ function ReceiptModal({ request, earnedPoints, onClose }) {
     : receiptAddress ? `https://explorer.solana.com/address/${receiptAddress}?cluster=devnet` : null
   const bottleCount = Math.round(Number(request.actual_weight_kg || 0) * BOTTLES_PER_KG)
   const copyHash = () => { navigator.clipboard?.writeText(request.verification_hash || ''); setCopied(true); setTimeout(() => setCopied(false), 1500) }
+  const receiptFileName = `bottleup-receipt-${request.id.slice(0, 8)}.png`
+
+  // Renders the receipt once and hands back both the image (for sharing/saving
+  // as a file) and the canvas (to fall back to a data URL where Blob won't do).
+  const getReceiptImage = async () => {
+    const canvas = await drawReceiptCard({ request, earnedPoints, bottleCount, explorerUrl })
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+    return { canvas, blob, file: blob && new File([blob], receiptFileName, { type: 'image/png' }) }
+  }
+
+  const saveReceiptFile = (canvas, blob) => {
+    const url = blob ? URL.createObjectURL(blob) : canvas.toDataURL('image/png')
+    const link = document.createElement('a')
+    link.download = receiptFileName
+    link.href = url
+    link.click()
+    if (blob) setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
 
   const shareReceipt = async () => {
+    const title = 'My BottleUp recycling receipt'
     const text = `${bottleCount.toLocaleString()} bottles recycled on BottleUp — ${earnedPoints.toLocaleString()} points earned.`
+    const { canvas, blob, file } = await getReceiptImage()
     try {
-      if (navigator.share) { await navigator.share({ title: 'My BottleUp recycling receipt', text, url: explorerUrl || undefined }); return }
-    } catch { return }
-    try {
-      await navigator.clipboard.writeText(explorerUrl ? `${text} ${explorerUrl}` : text)
-      setShareNotice('Copied to clipboard'); setTimeout(() => setShareNotice(''), 1800)
-    } catch {
-      setShareNotice('Could not share — copy the details manually'); setTimeout(() => setShareNotice(''), 2200)
-    }
+      // Share the receipt image itself wherever the platform supports file sharing.
+      if (file && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title, text }); return
+      }
+      if (navigator.share) { await navigator.share({ title, text, url: explorerUrl || undefined }); return }
+    } catch (err) { if (err?.name === 'AbortError') return }
+    // No native share sheet (or it only takes text) — save the receipt image
+    // itself instead of silently downgrading to a text-only clipboard copy.
+    saveReceiptFile(canvas, blob)
+    setShareNotice('Receipt image saved — share it from there')
+    setTimeout(() => setShareNotice(''), 2400)
   }
 
   const downloadReceipt = async () => {
-    const canvas = await drawReceiptCard({ request, earnedPoints, bottleCount, explorerUrl })
-    const link = document.createElement('a')
-    link.download = `bottleup-receipt-${request.id.slice(0, 8)}.png`
-    link.href = canvas.toDataURL('image/png')
-    link.click()
+    const { canvas, blob } = await getReceiptImage()
+    saveReceiptFile(canvas, blob)
   }
 
   return <div className="authGate" onClick={onClose}>
