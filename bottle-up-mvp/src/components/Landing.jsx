@@ -4,6 +4,9 @@ import ContactLinks from "./ContactLinks.jsx";
 import { Icon } from "./Icons.jsx";
 import "./landing.css";
 
+// Must match POINTS_PER_KG in main.jsx and bottleup_private.pickup_rate() in the database.
+const POINTS_PER_KG = 70;
+
 const faqs = [
   [
     "What can I give for recycling?",
@@ -15,7 +18,7 @@ const faqs = [
   ],
   [
     "When do I receive my points?",
-    "After collection, the recorded weight is reviewed and verified. You earn 100 points for every verified kilogram. Your estimate helps arrange the pickup; your final points are based on verified weight.",
+    `After collection, the recorded weight is reviewed and verified. You earn ${POINTS_PER_KG} points for every verified kilogram. Your estimate helps arrange the pickup; your final points are based on verified weight.`,
   ],
   [
     "What can I redeem my points for?",
@@ -291,7 +294,7 @@ export default function Landing({ onAuth, onLegal }) {
                 Well-earned points.
               </h3>
               <p>
-                We verify the collected weight. You get 100 points per kilogram,
+                We verify the collected weight. You get {POINTS_PER_KG} points per kilogram,
                 ready to build towards rewards.
               </p>
             </article>
@@ -334,7 +337,7 @@ export default function Landing({ onAuth, onLegal }) {
                   <label htmlFor="plastic-weight">
                     Imagine recycling <strong>{kilograms} kg</strong>
                   </label>
-                  <span>100 points / kg</span>
+                  <span>{POINTS_PER_KG} points / kg</span>
                 </div>
                 <input
                   id="plastic-weight"
@@ -343,11 +346,11 @@ export default function Landing({ onAuth, onLegal }) {
                   max="20"
                   value={kilograms}
                   onChange={(e) => setKilograms(Number(e.target.value))}
-                  aria-valuetext={`${kilograms} kilograms, ${kilograms * 100} points after verification`}
+                  aria-valuetext={`${kilograms} kilograms, ${kilograms * POINTS_PER_KG} points after verification`}
                 />
                 <div className="bu-calculator-result">
                   <output htmlFor="plastic-weight">
-                    {(kilograms * 100).toLocaleString()} <span>points</span>
+                    {(kilograms * POINTS_PER_KG).toLocaleString()} <span>points</span>
                   </output>
                   <span>
                     After collection

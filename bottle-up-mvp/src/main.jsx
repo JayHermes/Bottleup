@@ -263,9 +263,29 @@ function StageTracker({ status }) {
 
 function Stat({ icon: Icon, value, label }) { return <div className="miniStat"><div className="miniIcon"><Icon size={16} /></div><strong>{value}</strong><span>{label}</span></div> }
 
+const DISPLAY_FONT = '"Baloo 2", ui-rounded, sans-serif' // matches --font-display in styles.css
+const BODY_FONT = '"Inter", ui-sans-serif, system-ui, sans-serif' // matches --font-body in styles.css
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = reject
+    img.src = src
+  })
+}
+
 // Draws a shareable, certificate-style PNG of a receipt — for users who want
 // to post or forward proof of what they recycled, not just view it in-app.
-function drawReceiptCard({ request, earnedPoints, bottleCount, explorerUrl }) {
+// Mirrors the app's own look (fonts, palette, brand mark) rather than a generic card.
+async function drawReceiptCard({ request, earnedPoints, bottleCount, explorerUrl }) {
+  const [markImg] = await Promise.all([
+    loadImage('/brand/mark.svg').catch(() => null),
+    document.fonts?.ready,
+    ...['800 48px', '700 26px', '800 24px', '800 22px'].map(f => document.fonts?.load(`${f} ${DISPLAY_FONT}`)),
+    ...['400 22px', '600 20px', '400 18px', '600 18px'].map(f => document.fonts?.load(`${f} ${BODY_FONT}`)),
+  ])
+
   const canvas = document.createElement('canvas')
   const W = 1080, H = 1350
   canvas.width = W; canvas.height = H
@@ -279,7 +299,7 @@ function drawReceiptCard({ request, earnedPoints, bottleCount, explorerUrl }) {
     ctx.arcTo(x, y, x + w, y, r)
     ctx.closePath()
   }
-  // background
+  // background — matches the app shell's radial gradient
   const bg = ctx.createRadialGradient(W * 0.75, 90, 40, W * 0.5, H * 0.3, 900)
   bg.addColorStop(0, '#173a2c'); bg.addColorStop(1, '#0b1512')
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H)
@@ -290,21 +310,23 @@ function drawReceiptCard({ request, earnedPoints, bottleCount, explorerUrl }) {
   ctx.lineWidth = 2; ctx.strokeStyle = '#2a473a'; ctx.stroke()
 
   let y = pad + 86
-  // wordmark
-  ctx.fillStyle = '#26a65f'
-  roundRect(pad + 48, y - 34, 46, 46, 13); ctx.fill()
-  ctx.fillStyle = '#fff'; ctx.font = '800 24px sans-serif'; ctx.textBaseline = 'middle'
-  ctx.fillText('B', pad + 48 + 23 - 7, y - 10)
-  ctx.font = '800 26px sans-serif'; ctx.fillStyle = '#f5f3e9'
+  // brand mark — the real logo, not a stand-in
+  roundRect(pad + 48, y - 34, 46, 46, 13)
+  ctx.fillStyle = '#f5f3e9'; ctx.fill()
+  if (markImg) {
+    const mw = 24, mh = 24 * (markImg.height / markImg.width)
+    ctx.drawImage(markImg, pad + 48 + (46 - mw) / 2, y - 34 + (46 - mh) / 2, mw, mh)
+  }
+  ctx.font = `700 26px ${DISPLAY_FONT}`; ctx.fillStyle = '#f5f3e9'; ctx.textBaseline = 'middle'
   ctx.fillText('Bottle', pad + 110, y - 10)
   const bw = ctx.measureText('Bottle').width
   ctx.fillStyle = '#5be394'; ctx.fillText('Up', pad + 110 + bw, y - 10)
 
   y += 70
-  ctx.fillStyle = '#f5f3e9'; ctx.font = '800 48px sans-serif'; ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = '#f5f3e9'; ctx.font = `800 48px ${DISPLAY_FONT}`; ctx.textBaseline = 'alphabetic'
   ctx.fillText('Recycling receipt', pad + 48, y)
   y += 36
-  ctx.fillStyle = '#9bb0a6'; ctx.font = '400 22px sans-serif'
+  ctx.fillStyle = '#9bb0a6'; ctx.font = `400 22px ${BODY_FONT}`
   ctx.fillText('A verified record of this collection.', pad + 48, y)
 
   y += 56
@@ -318,8 +340,8 @@ function drawReceiptCard({ request, earnedPoints, bottleCount, explorerUrl }) {
   for (const [label, value] of rows) {
     ctx.strokeStyle = '#2a473a'; ctx.lineWidth = 1.5
     ctx.beginPath(); ctx.moveTo(pad + 48, y + 18); ctx.lineTo(W - pad - 48, y + 18); ctx.stroke()
-    ctx.fillStyle = '#9bb0a6'; ctx.font = '600 20px sans-serif'; ctx.fillText(label, pad + 48, y)
-    ctx.fillStyle = '#f5f3e9'; ctx.font = '800 24px sans-serif'; ctx.textAlign = 'right'
+    ctx.fillStyle = '#9bb0a6'; ctx.font = `600 20px ${BODY_FONT}`; ctx.fillText(label, pad + 48, y)
+    ctx.fillStyle = '#f5f3e9'; ctx.font = `800 24px ${DISPLAY_FONT}`; ctx.textAlign = 'right'
     ctx.fillText(value, W - pad - 48, y); ctx.textAlign = 'left'
     y += 70
   }
@@ -329,17 +351,17 @@ function drawReceiptCard({ request, earnedPoints, bottleCount, explorerUrl }) {
     roundRect(pad + 48, y, W - pad * 2 - 96, 92, 16)
     ctx.fillStyle = 'rgba(38,166,95,.13)'; ctx.fill()
     ctx.strokeStyle = 'rgba(91,227,148,.35)'; ctx.stroke()
-    ctx.fillStyle = '#5be394'; ctx.font = '800 22px sans-serif'; ctx.textBaseline = 'middle'
+    ctx.fillStyle = '#5be394'; ctx.font = `800 22px ${DISPLAY_FONT}`; ctx.textBaseline = 'middle'
     ctx.fillText('✓ Verified on-chain — Solana devnet', pad + 76, y + 36)
-    ctx.fillStyle = '#9bb0a6'; ctx.font = '400 18px sans-serif'
+    ctx.fillStyle = '#9bb0a6'; ctx.font = `400 18px ${BODY_FONT}`
     ctx.fillText(explorerUrl.replace('https://', ''), pad + 76, y + 68)
     ctx.textBaseline = 'alphabetic'
   } else {
-    ctx.fillStyle = '#9bb0a6'; ctx.font = '400 20px sans-serif'
+    ctx.fillStyle = '#9bb0a6'; ctx.font = `400 20px ${BODY_FONT}`
     ctx.fillText('On-chain proof is still being submitted.', pad + 48, y + 30)
   }
 
-  ctx.fillStyle = '#6f887d'; ctx.font = '600 18px sans-serif'
+  ctx.fillStyle = '#6f887d'; ctx.font = `600 18px ${BODY_FONT}`
   ctx.fillText('usebottleup.xyz', pad + 48, H - pad - 40)
 
   return canvas
@@ -357,7 +379,7 @@ function ReceiptModal({ request, earnedPoints, onClose }) {
   const copyHash = () => { navigator.clipboard?.writeText(request.verification_hash || ''); setCopied(true); setTimeout(() => setCopied(false), 1500) }
 
   const shareReceipt = async () => {
-    const text = `I recycled ${bottleCount.toLocaleString()} bottles (${request.actual_weight_kg}kg of ${request.material_type}) through BottleUp and earned ${earnedPoints.toLocaleString()} points${explorerUrl ? ' — verified on-chain' : ''}.`
+    const text = `${bottleCount.toLocaleString()} bottles recycled on BottleUp — ${earnedPoints.toLocaleString()} points earned.`
     try {
       if (navigator.share) { await navigator.share({ title: 'My BottleUp recycling receipt', text, url: explorerUrl || undefined }); return }
     } catch { return }
@@ -369,8 +391,8 @@ function ReceiptModal({ request, earnedPoints, onClose }) {
     }
   }
 
-  const downloadReceipt = () => {
-    const canvas = drawReceiptCard({ request, earnedPoints, bottleCount, explorerUrl })
+  const downloadReceipt = async () => {
+    const canvas = await drawReceiptCard({ request, earnedPoints, bottleCount, explorerUrl })
     const link = document.createElement('a')
     link.download = `bottleup-receipt-${request.id.slice(0, 8)}.png`
     link.href = canvas.toDataURL('image/png')
