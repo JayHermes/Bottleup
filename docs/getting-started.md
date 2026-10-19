@@ -38,6 +38,8 @@ For a **new, empty project**, run [`bottle-up-mvp/supabase/schema.sql`](../bottl
 
 If enabling Solana receipts, additionally apply [`202610120001_add_solana_receipt_fields.sql`](../solana-verification/migrations/202610120001_add_solana_receipt_fields.sql), then configure the program and Edge Function as described in [deployment](deployment.md). The bootstrap alone does not deploy the receipt function or on-chain program.
 
+The bootstrap also includes the airtime/data rewards schema (phone verification, `request_airtime_reward`, `process_airtime_result`), but not the `request-phone-otp`, `verify-phone-otp`, and `fulfil-airtime-reward` Edge Functions or their Termii/VTpass secrets — deploy and configure those as described in [deployment](deployment.md) before offering airtime or data as a reward. Until then, those rewards should stay inactive in `reward_catalog`.
+
 Configure Supabase Auth's site URL and permitted redirect URLs for your local and hosted origins. Password recovery returns through the application, so test the complete email-link flow for each environment.
 
 Sign up normally to create a user profile. Collector approval is an administrator workflow; the first administrator must be provisioned by a trusted project owner through backend administration. Do not expose role promotion in signup metadata or a public UI.

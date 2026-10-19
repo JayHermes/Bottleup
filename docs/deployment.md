@@ -36,6 +36,25 @@ Store signing material in Supabase server secrets. Do not put it in a `VITE_*` v
 
 For program builds, deployment identity, initialization, and upload recovery, use the [Solana guide](../solana-verification/README.md). Back up the authority wallet and program keypair securely. Both are ignored by Git and are not recreated by cloning this repository.
 
+### Airtime and data rewards
+
+Automated airtime/data top-ups need the `20261017000000_airtime_data_rewards.sql` migration (also folded into `schema.sql` for fresh projects) and three Edge Functions from `bottle-up-mvp/supabase/functions/`: `request-phone-otp`, `verify-phone-otp`, and `fulfil-airtime-reward` (each needs its `../_shared/phone.mjs` or `../_shared/vtpass.mjs` helper deployed alongside it). Keep JWT verification enabled on all three.
+
+| Variable | Purpose | Used by |
+| --- | --- | --- |
+| `PHONE_OTP_PEPPER` | Server-only secret mixed into the stored OTP hash | `request-phone-otp`, `verify-phone-otp` |
+| `TERMII_API_KEY` | Termii account API key | `request-phone-otp` |
+| `TERMII_SENDER_ID` | Approved Termii sender ID | `request-phone-otp` |
+| `VTPASS_API_KEY` | VTpass account API key | `fulfil-airtime-reward` |
+| `VTPASS_SECRET_KEY` | VTpass account secret key | `fulfil-airtime-reward` |
+| `VTPASS_BASE_URL` | Optional override; defaults to `https://vtpass.com/api`. Point at VTpass's sandbox host while testing | `fulfil-airtime-reward` |
+
+Treat all of these as server secrets, same as the Solana signing key — never in a `VITE_*` variable.
+
+The redemption flow is fully automatic by design: `request_airtime_reward()` debits points and creates the redemption as `processing`, and the frontend calls `fulfil-airtime-reward` immediately after, which calls VTpass and resolves the redemption via `process_airtime_result()` (granted to `service_role` only, so no client can mark its own reward fulfilled). A VTpass failure or an unhandled error in the function fails closed — the redemption is marked `failed` and the user's points are refunded automatically, rather than leaving it stuck in `processing`.
+
+Before enabling this for real money, confirm two things against your own VTpass dashboard rather than this repo's code: the airtime `serviceID` per network (the 9mobile entry has historically been listed under the legacy name `etisalat` — check `AIRTIME_SERVICE_IDS` in `_shared/vtpass.mjs`), and the data bundle rows in `reward_catalog` (`vtpass_service_id`, `vtpass_variation_code`, `amount_naira`) — the migration intentionally seeds no data bundles, since those codes and prices are account-specific and change over time.
+
 ## Release verification
 
 Run the [testing checklist](testing.md), then confirm sign-in, photo access, a normal collector/admin pickup, points history, and Explorer links on the deployed site. A green frontend build does not verify database policies, configured server secrets, or blockchain deployment.
@@ -53,6 +72,9 @@ Inspect failed receipt status before retrying. Verification and points remain va
 | Photo cannot be read | Private bucket, object path, owner/assigned collector/admin policy, signed URL expiry |
 | Pickup cannot advance | Persisted role, assignment, current status, and database RPC error |
 | Receipt fails | Admin session, VERIFIED row, valid weight/date, server secrets, signer balance, RPC availability, program config |
+| Airtime/data redemption refused | Phone verified (`phone_verified_at` set), a network chosen for airtime, the reward is `active` and of the right `kind` |
+| Airtime/data stuck in "processing" | `fulfil-airtime-reward` deployed and reachable, VTpass server secrets configured, VTpass account balance — a stuck row still refunds automatically once the function runs and fails closed |
+| OTP not received | Termii server secrets, sender ID approval status, phone normalized to `+234…`, resend cooldown/hourly cap |
 | Explorer appears empty | The link/network must select Devnet |
 | Points differ from history | Use the reconciliation query in the points guide; do not edit balances or ledger entries manually |
 

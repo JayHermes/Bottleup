@@ -40,6 +40,7 @@ export const Leaf = icon("leaf-outline");
 export const MapPin = icon("location-outline");
 export const Package = icon("cube-outline");
 export const Pencil = icon("pencil-outline");
+export const Smartphone = icon("phone-portrait-outline");
 export const Recycle = icon("sync-outline");
 export const ShieldCheck = icon("shield-checkmark-outline");
 export const Truck = icon("bicycle-outline");

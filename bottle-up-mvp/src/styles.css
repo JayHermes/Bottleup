@@ -195,8 +195,9 @@
 .distanceBadge{color:var(--green-bright)!important;font-weight:700}
 
 .status.pending{background:#3c3016;color:var(--gold-soft)}
+.status.processing{background:#15283c;color:#8fc4f0}
 .status.fulfilled{background:#153c26;color:var(--green-bright)}
-.status.rejected{background:#3a1e1a;color:#f0a99b}
+.status.rejected,.status.failed{background:#3a1e1a;color:#f0a99b}
 
 /* ============================================================
    V2.1 addition — visible pin preview for captured location

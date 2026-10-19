@@ -528,7 +528,8 @@
 .dashForm label:last-of-type {
   grid-column: 1/-1;
 }
-.dashForm input {
+.dashForm input,
+.dashForm select {
   width: 100%;
   padding: 16px;
   font-size: 14px;

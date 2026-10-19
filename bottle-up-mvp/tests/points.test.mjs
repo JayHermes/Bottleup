@@ -84,7 +84,7 @@ test('points: real schema upgrade, pickup lifecycle, spending, retries, refunds 
 test('fresh project bootstrap installs the same points commands and signup flow', async () => {
  const db = new PGlite()
  try {
-  await db.exec(`create role anon; create role authenticated; create schema auth; create schema storage;
+  await db.exec(`create role anon; create role authenticated; create role service_role; create schema auth; create schema storage;
    create table auth.users(id uuid primary key,raw_user_meta_data jsonb default '{}');
    create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
    grant usage on schema auth to authenticated;
