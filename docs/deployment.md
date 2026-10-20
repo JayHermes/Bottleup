@@ -87,3 +87,11 @@ The live project contained six- and seven-argument `bottleup_private.post_points
 The migration was applied to BottleUP. A transaction-scoped live test under the authenticated admin role verified a collected pickup, credited the user and collector at the live configured rates, and confirmed that a repeat verification did not credit twice. All fixtures were rolled back. The local regression test also covers redemption/refund and migration replay.
 
 The live project currently uses 70 user points and 25 collector points per kilogram, whereas the original bootstrap and earlier product documentation describe 100 user points per kilogram. This repair preserves deployed rates. Reconcile product copy and the reproducible schema with the team's chosen rate in a separate change.
+
+## Profile read compatibility repair — 20 October 2026
+
+The deployed frontend selected `profiles.phone_verified_at` and `reward_catalog.kind/network` before the airtime migration had been applied to production. PostgreSQL error `42703` on the profile query prevented the dashboard from loading its balance.
+
+`20261020132828_frontend_profile_compatibility.sql` adds those read dependencies and requests a PostgREST schema-cache reload. Phone verification timestamps stay null; existing catalog entries default to `manual`. This repair does not activate automated airtime fulfilment, spend provider funds, alter balances, or grant clients permission to mark a phone verified. The full airtime migration and provider/function configuration remain a separate deployment step. Do not assume a successful frontend deployment applies database migrations.
+
+Verified on the live project using the deployed profile and reward projections under authenticated permissions: one matching profile, three readable rewards, and no client UPDATE privilege on `phone_verified_at`. Local regression coverage checks unchanged balances, migration replay, denied self-verification, and compatibility with the subsequent full airtime migration.
