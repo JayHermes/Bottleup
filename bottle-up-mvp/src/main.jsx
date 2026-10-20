@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
-  ArrowRight, Bell, Camera, Check, ChevronRight, Coins, Download, Gift, Home, Leaf,
-  MapPin, Package, Pencil, Recycle, Share, ShieldCheck, Truck, UserRound, Users,
+  ArrowRight, Bell, Camera, Check, ChevronRight, Coins, Gift, Home, Leaf,
+  MapPin, Package, Pencil, Recycle, ShieldCheck, Truck, UserRound, Users,
   WalletCards, Weight, X
 } from './components/Icons.jsx'
 import './styles.css'
 import './components/dashboard.css'
 import DashboardHome from './components/DashboardHome.jsx'
 import BankAccount from './components/BankAccount.jsx'
+import ReceiptModal from './components/ReceiptModal.jsx'
 import PhoneVerification from './components/PhoneVerification.jsx'
 import PickupPhoto from './components/PickupPhoto.jsx'
 import PointsHistory from './components/PointsHistory.jsx'
@@ -264,209 +265,6 @@ function StageTracker({ status }) {
 
 function Stat({ icon: Icon, value, label }) { return <div className="miniStat"><div className="miniIcon"><Icon size={16} /></div><strong>{value}</strong><span>{label}</span></div> }
 
-const DISPLAY_FONT = '"Baloo 2", ui-rounded, sans-serif' // matches --font-display in styles.css
-const BODY_FONT = '"Inter", ui-sans-serif, system-ui, sans-serif' // matches --font-body in styles.css
-
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => resolve(img)
-    img.onerror = reject
-    img.src = src
-  })
-}
-
-// Draws a shareable, certificate-style PNG of a receipt — for users who want
-// to post or forward proof of what they recycled, not just view it in-app.
-// Mirrors the app's own look (fonts, palette, brand mark) rather than a generic card.
-async function drawReceiptCard({ request, earnedPoints, bottleCount, explorerUrl }) {
-  const [markImg] = await Promise.all([
-    loadImage('/brand/mark.svg').catch(() => null),
-    document.fonts?.ready,
-    ...['800 48px', '700 26px', '800 24px', '800 22px'].map(f => document.fonts?.load(`${f} ${DISPLAY_FONT}`)),
-    ...['400 22px', '600 20px', '400 18px', '600 18px'].map(f => document.fonts?.load(`${f} ${BODY_FONT}`)),
-  ])
-
-  const canvas = document.createElement('canvas')
-  const W = 1080, H = 1350
-  canvas.width = W; canvas.height = H
-  const ctx = canvas.getContext('2d')
-  const roundRect = (x, y, w, h, r) => {
-    ctx.beginPath()
-    ctx.moveTo(x + r, y)
-    ctx.arcTo(x + w, y, x + w, y + h, r)
-    ctx.arcTo(x + w, y + h, x, y + h, r)
-    ctx.arcTo(x, y + h, x, y, r)
-    ctx.arcTo(x, y, x + w, y, r)
-    ctx.closePath()
-  }
-  // background — matches the app shell's radial gradient
-  const bg = ctx.createRadialGradient(W * 0.75, 90, 40, W * 0.5, H * 0.3, 900)
-  bg.addColorStop(0, '#173a2c'); bg.addColorStop(1, '#0b1512')
-  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H)
-  // card
-  const pad = 56
-  roundRect(pad, pad, W - pad * 2, H - pad * 2, 36)
-  ctx.fillStyle = '#12221d'; ctx.fill()
-  ctx.lineWidth = 2; ctx.strokeStyle = '#2a473a'; ctx.stroke()
-
-  let y = pad + 86
-  // brand mark — the real logo, not a stand-in
-  roundRect(pad + 48, y - 34, 46, 46, 13)
-  ctx.fillStyle = '#f5f3e9'; ctx.fill()
-  if (markImg) {
-    const mw = 24, mh = 24 * (markImg.height / markImg.width)
-    ctx.drawImage(markImg, pad + 48 + (46 - mw) / 2, y - 34 + (46 - mh) / 2, mw, mh)
-  }
-  ctx.font = `700 26px ${DISPLAY_FONT}`; ctx.fillStyle = '#f5f3e9'; ctx.textBaseline = 'middle'
-  ctx.fillText('Bottle', pad + 110, y - 10)
-  const bw = ctx.measureText('Bottle').width
-  ctx.fillStyle = '#5be394'; ctx.fillText('Up', pad + 110 + bw, y - 10)
-
-  // status pill — same shape/colors as the "VERIFIED" badge on request cards
-  const pillLabel = 'V E R I F I E D'
-  ctx.font = `800 15px ${BODY_FONT}`
-  const pillTextW = ctx.measureText(pillLabel).width
-  const pillW = pillTextW + 34, pillH = 30
-  roundRect(W - pad - 48 - pillW, y - 34 + (46 - pillH) / 2, pillW, pillH, 99)
-  ctx.fillStyle = '#153c26'; ctx.fill()
-  ctx.fillStyle = '#5be394'
-  ctx.fillText(pillLabel, W - pad - 48 - pillW + 17, y - 10)
-
-  y += 70
-  ctx.fillStyle = '#f5f3e9'; ctx.font = `800 48px ${DISPLAY_FONT}`; ctx.textBaseline = 'alphabetic'
-  ctx.fillText('Recycling receipt', pad + 48, y)
-  y += 36
-  ctx.fillStyle = '#9bb0a6'; ctx.font = `400 22px ${BODY_FONT}`
-  ctx.fillText('A verified record of this collection.', pad + 48, y)
-
-  y += 56
-  const rows = [
-    ['Material', String(request.material_type || '—')],
-    ['Bottles recycled', bottleCount ? `${bottleCount.toLocaleString()} bottles` : '—'],
-    ['Verified weight', `${request.actual_weight_kg} kg`],
-    ['Points awarded', `${earnedPoints.toLocaleString()} pts`],
-    ['Verified', request.verified_at ? new Date(request.verified_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : '—'],
-  ]
-  for (const [label, value] of rows) {
-    ctx.strokeStyle = '#2a473a'; ctx.lineWidth = 1.5
-    ctx.beginPath(); ctx.moveTo(pad + 48, y + 18); ctx.lineTo(W - pad - 48, y + 18); ctx.stroke()
-    ctx.fillStyle = '#9bb0a6'; ctx.font = `600 20px ${BODY_FONT}`; ctx.fillText(label, pad + 48, y)
-    ctx.fillStyle = '#f5f3e9'; ctx.font = `800 24px ${DISPLAY_FONT}`; ctx.textAlign = 'right'
-    ctx.fillText(value, W - pad - 48, y); ctx.textAlign = 'left'
-    y += 70
-  }
-
-  y += 14
-  if (explorerUrl) {
-    roundRect(pad + 48, y, W - pad * 2 - 96, 92, 16)
-    ctx.fillStyle = 'rgba(38,166,95,.13)'; ctx.fill()
-    ctx.strokeStyle = 'rgba(91,227,148,.35)'; ctx.stroke()
-    ctx.fillStyle = '#5be394'; ctx.font = `800 22px ${DISPLAY_FONT}`; ctx.textBaseline = 'middle'
-    ctx.fillText('✓ Verified on-chain — Solana devnet', pad + 76, y + 36)
-    ctx.fillStyle = '#9bb0a6'; ctx.font = `400 18px ${BODY_FONT}`
-    ctx.fillText(explorerUrl.replace('https://', ''), pad + 76, y + 68)
-    ctx.textBaseline = 'alphabetic'
-  } else {
-    ctx.fillStyle = '#9bb0a6'; ctx.font = `400 20px ${BODY_FONT}`
-    ctx.fillText('On-chain proof is still being submitted.', pad + 48, y + 30)
-  }
-
-  ctx.fillStyle = '#6f887d'; ctx.font = `600 18px ${BODY_FONT}`
-  ctx.fillText('usebottleup.xyz', pad + 48, H - pad - 40)
-
-  return canvas
-}
-
-function ReceiptModal({ request, earnedPoints, onClose }) {
-  const [copied, setCopied] = useState(false)
-  const [shareNotice, setShareNotice] = useState('')
-  const receiptSignature = request.solana_tx_signature || request.onchain_tx_signature
-  const receiptAddress = request.solana_receipt_address || request.onchain_record_account
-  const explorerUrl = receiptSignature
-    ? `https://explorer.solana.com/tx/${receiptSignature}?cluster=devnet`
-    : receiptAddress ? `https://explorer.solana.com/address/${receiptAddress}?cluster=devnet` : null
-  const bottleCount = Math.round(Number(request.actual_weight_kg || 0) * BOTTLES_PER_KG)
-  const copyHash = () => { navigator.clipboard?.writeText(request.verification_hash || ''); setCopied(true); setTimeout(() => setCopied(false), 1500) }
-  const receiptFileName = `bottleup-receipt-${request.id.slice(0, 8)}.png`
-
-  // Renders the receipt once and hands back both the image (for sharing/saving
-  // as a file) and the canvas (to fall back to a data URL where Blob won't do).
-  const getReceiptImage = async () => {
-    const canvas = await drawReceiptCard({ request, earnedPoints, bottleCount, explorerUrl })
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
-    return { canvas, blob, file: blob && new File([blob], receiptFileName, { type: 'image/png' }) }
-  }
-
-  const saveReceiptFile = (canvas, blob) => {
-    const url = blob ? URL.createObjectURL(blob) : canvas.toDataURL('image/png')
-    const link = document.createElement('a')
-    link.download = receiptFileName
-    link.href = url
-    link.click()
-    if (blob) setTimeout(() => URL.revokeObjectURL(url), 1000)
-  }
-
-  const shareReceipt = async () => {
-    const title = 'My BottleUp recycling receipt'
-    const text = `${bottleCount.toLocaleString()} bottles recycled on BottleUp — ${earnedPoints.toLocaleString()} points earned.`
-    const { canvas, blob, file } = await getReceiptImage()
-    try {
-      // Share the receipt image itself wherever the platform supports file sharing.
-      if (file && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title, text }); return
-      }
-      if (navigator.share) { await navigator.share({ title, text, url: explorerUrl || undefined }); return }
-    } catch (err) { if (err?.name === 'AbortError') return }
-    // No native share sheet (or it only takes text) — save the receipt image
-    // itself instead of silently downgrading to a text-only clipboard copy.
-    saveReceiptFile(canvas, blob)
-    setShareNotice('Receipt image saved — share it from there')
-    setTimeout(() => setShareNotice(''), 2400)
-  }
-
-  const downloadReceipt = async () => {
-    const { canvas, blob } = await getReceiptImage()
-    saveReceiptFile(canvas, blob)
-  }
-
-  return <div className="authGate" onClick={onClose}>
-    <div className="authCard receiptCard" onClick={e => e.stopPropagation()}>
-      <button className="iconButton authBack" onClick={onClose}><X size={18} /></button>
-      <div className="authBrand"><Logo /><span>Bottle<span>Up</span></span></div>
-      <h1 className="authTitle">Recycling receipt</h1>
-      <p className="authCopy">A verified record of this collection.</p>
-      <div className="receiptRows">
-        <div><span>Material</span><strong>{request.material_type}</strong></div>
-        <div><span>Bottles recycled</span><strong>{bottleCount.toLocaleString()}</strong></div>
-        <div><span>Verified weight</span><strong>{request.actual_weight_kg} kg</strong></div>
-        <div><span>Points awarded</span><strong>{earnedPoints.toLocaleString()} pts</strong></div>
-        <div><span>Verified</span><strong>{request.verified_at ? new Date(request.verified_at).toLocaleString() : '—'}</strong></div>
-      </div>
-      {request.verification_hash && (
-        <div className="receiptHash">
-          <span>Verification hash</span>
-          <div className="receiptHashRow"><code>{request.verification_hash}</code><button onClick={copyHash}>{copied ? 'Copied' : 'Copy'}</button></div>
-        </div>
-      )}
-      {explorerUrl ? (
-        <>
-          <a className="primary" style={{ textAlign: 'center' }} href={explorerUrl} target="_blank" rel="noreferrer">View proof on Solana Explorer <ArrowRight size={16} /></a>
-          {receiptAddress && (
-            <a className="textButton" style={{ textAlign: 'center', marginTop: 8 }} href={`https://explorer.solana.com/address/${receiptAddress}?cluster=devnet`} target="_blank" rel="noreferrer">View permanent record account <ArrowRight size={14} /></a>
-          )}
-        </>
-      ) : (
-        <div className="authMessage">Onchain proof is still being submitted — check back shortly.</div>
-      )}
-      <div className="receiptShareRow">
-        <button className="secondary" onClick={shareReceipt}><Share size={15} /> Share</button>
-        <button className="secondary" onClick={downloadReceipt}><Download size={15} /> Download image</button>
-      </div>
-      {shareNotice && <div className="authMessage" style={{ textAlign: 'center' }}>{shareNotice}</div>}
-    </div>
-  </div>
-}
 
 function RequestCard({ request, action, compact = false, distanceKm, pointsRate = POINTS_PER_KG }) {
   const weight = request.actual_weight_kg || request.estimated_weight_kg

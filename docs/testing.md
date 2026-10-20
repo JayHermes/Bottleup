@@ -52,3 +52,11 @@ Use clearly labelled test data and accounts with the intended roles. Check each 
 Do not mark a test reward fulfilled unless the test procedure accounts for any manual delivery. Clean up only the labelled fixtures, respecting ledger and foreign-key retention rules.
 
 For the dated results and remaining checks, see [submission readiness](submission-readiness.md) and [Devnet evidence](../solana-verification/deployment/devnet-test-results.json).
+
+## Receipt image exports
+
+Download and Share capture the displayed `ReceiptModal` through `src/lib/receipt-image.js`; there is no separate drawn receipt template. The capture embeds the local BottleSans font, uses the card's computed styles, and omits controls marked `data-receipt-control`. Keep that marker on new interactive export controls.
+
+When changing the receipt, compare the modal and the downloaded PNG at desktop and phone widths. Check the logo, cream/green palette, bottle count, weight, points, complete timestamp and verification hash, and proof/pending state. Share and Download must use the same image. Test an export failure as well: it must show an error and allow retrying. PNG proof labels are part of the image; use the app's Explorer links for clickable blockchain navigation.
+
+On 20 October 2026, local Chrome checks downloaded and visually inspected both desktop- and phone-width PNGs using a synthetic receipt; both rendered with the app's branding and no page errors. No live pickup data was changed.
